@@ -29,6 +29,14 @@ public interface ResumeDocumentRepository extends JpaRepository<ResumeDocument, 
     Optional<ResumeDocument> findByCandidateIdAndActiveVersion(String candidateId, boolean activeVersion);
 
     /**
+     * 查询候选人的最新版本简历。
+     *
+     * @param candidateId 候选人 ID
+     * @return 最新版本简历
+     */
+    Optional<ResumeDocument> findTopByCandidateIdOrderByVersionNoDesc(String candidateId);
+
+    /**
      * 按处理状态查询简历列表。
      *
      * @param status 简历处理状态
