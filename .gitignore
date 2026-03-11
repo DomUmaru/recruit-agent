@@ -20,8 +20,13 @@ Thumbs.db
 
 # Local env
 .env
-.env.*
+.env.local
+.env.dev
+.env.prod
+.env.test
 
 # Temporary files
 *.tmp
 *.temp
+tmp/
+data/
