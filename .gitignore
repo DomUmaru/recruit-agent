@@ -1,0 +1,27 @@
+# Maven
+target/
+.m2/
+.mvn-home/
+
+# Wrapper cache
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local env
+.env
+.env.*
+
+# Temporary files
+*.tmp
+*.temp

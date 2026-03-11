@@ -1,0 +1,141 @@
+{
+  "resume_chunk": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1
+    },
+    "mappings": {
+      "properties": {
+        "id": {
+          "type": "keyword"
+        },
+        "candidateId": {
+          "type": "keyword"
+        },
+        "docId": {
+          "type": "keyword"
+        },
+        "parentId": {
+          "type": "keyword"
+        },
+        "chunkType": {
+          "type": "keyword"
+        },
+        "section": {
+          "type": "keyword"
+        },
+        "page": {
+          "type": "integer"
+        },
+        "chunkOrder": {
+          "type": "integer"
+        },
+        "content": {
+          "type": "text",
+          "analyzer": "standard"
+        },
+        "normalizedContent": {
+          "type": "text",
+          "analyzer": "standard"
+        },
+        "tags": {
+          "type": "keyword"
+        },
+        "metadata": {
+          "type": "object",
+          "enabled": true
+        },
+        "embedding": {
+          "type": "dense_vector",
+          "dims": 1024,
+          "index": true,
+          "similarity": "cosine"
+        },
+        "indexedAt": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        }
+      }
+    }
+  },
+  "candidate_profile": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1
+    },
+    "mappings": {
+      "properties": {
+        "id": {
+          "type": "keyword"
+        },
+        "candidateId": {
+          "type": "keyword"
+        },
+        "candidateNo": {
+          "type": "keyword"
+        },
+        "fullName": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "currentCity": {
+          "type": "keyword"
+        },
+        "schoolName": {
+          "type": "keyword"
+        },
+        "highestDegree": {
+          "type": "keyword"
+        },
+        "schoolTier": {
+          "type": "keyword"
+        },
+        "totalYearsOfExperience": {
+          "type": "scaled_float",
+          "scaling_factor": 10
+        },
+        "technicalSkills": {
+          "type": "keyword"
+        },
+        "industryTags": {
+          "type": "keyword"
+        },
+        "companyTags": {
+          "type": "keyword"
+        },
+        "projectTags": {
+          "type": "keyword"
+        },
+        "bigTech": {
+          "type": "boolean"
+        },
+        "outsourcing": {
+          "type": "boolean"
+        },
+        "profileSummary": {
+          "type": "text",
+          "analyzer": "standard"
+        },
+        "metadata": {
+          "type": "object",
+          "enabled": true
+        },
+        "embedding": {
+          "type": "dense_vector",
+          "dims": 1024,
+          "index": true,
+          "similarity": "cosine"
+        },
+        "indexedAt": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        }
+      }
+    }
+  }
+}
