@@ -1,15 +1,16 @@
 # recruit-agent
 
-面向 ToB 招聘场景的智能招聘与面试辅助 Agent 系统。
+面向 ToB 招聘场景的智能招聘与面试辅助 Agent 后端系统。
 
 ## 项目目标
 
-本项目面向 HR、招聘专员和技术面试官，目标是构建一套可对话的招聘工作台，覆盖这些核心场景：
+项目面向 HR、招聘专员和技术面试官，目标是构建一套可对话的招聘工作台，覆盖这些核心场景：
 
 - 候选人简历上传、解析与结构化入库
 - 基于 JD 或自然语言的候选人搜索
 - 条件筛选、多轮 refinement 和候选人对比
 - 基于简历和 JD 生成面试问题与追问建议
+- 通过统一 chat 入口完成搜索、筛选、对比和面试题生成
 
 当前技术路线：
 
@@ -22,7 +23,7 @@
 
 ## 当前进度
 
-当前仓库已经完成 `Step 1`、`Step 2`，并落地了 `Step 3` 与 `Step 4` 的主干能力，同时提供了 `Step 5` 的 chat API 与 SSE MVP。
+当前仓库已经完成 `Step 1`、`Step 2`、`Step 3`、`Step 4` 和 `Step 5` 的 MVP 主链，并补齐了候选人对比与面试题生成功能。
 
 ### Step 1 已完成
 
@@ -30,7 +31,7 @@
 - Maven Wrapper、本仓库内 Maven settings
 - 核心 JPA Entity 建模
 - Elasticsearch Document 建模
-- Repository 仓储接口
+- Repository 接口
 - MySQL DDL 与 Elasticsearch mapping 文档冻结
 
 ### Step 2 已完成
@@ -67,7 +68,7 @@
 
 ### Step 4 已完成的基础能力
 
-- `SEARCH` / `FILTER_REFINE` 路由决策
+- `SEARCH` / `FILTER_REFINE` / `COMPARE` / `INTERVIEW` 路由决策
 - Router 决策对象与上下文模型
 - Tool 风格的服务封装
 - 会话状态装配：
@@ -79,6 +80,8 @@
 - 正式 Tool：
   - `searchCandidateByJDTool`
   - `refineSearchFilterTool`
+  - `compareCandidatesTool`
+  - `generateInterviewQuestionsTool`
 - `ChatClient` 配置与无模型回退执行策略
 
 ### Step 5 已完成的 MVP
@@ -94,12 +97,28 @@
   - `tool_result`
   - `state_update`
   - `citation`
+  - `comparison`
+  - `interview`
   - `token`
   - `done`
   - `error`
 
+### 已补齐的业务能力
+
+- `comparison` 模块
+  - 候选人横向对比
+  - 输出亮点、风险点、证据片段和总结
+  - 对外接口：`POST /api/comparison/candidates`
+- `interview` 模块
+  - 基于候选人画像与简历证据生成结构化面试题
+  - 输出候选人级题集、问题分类、提问理由和证据
+  - 对外接口：`POST /api/interview/questions`
+
 ## 最近提交
 
+- `5de734c` `feat: add interview question generation flow`
+- `6906c47` `feat: enrich comparison chat payloads`
+- `55059c8` `feat: add candidate comparison tool flow`
 - `16cbc78` `feat: add chat api and sse event streaming`
 - `cd08d35` `feat: add spring ai tool calling and agent orchestrator`
 - `bfa371a` `feat: add search retrieval and agent routing foundation`
@@ -118,6 +137,7 @@
 - `CandidateProfileIndex` 索引写入成功
 - 英文年限表达如 `5 years` 可抽取为 `5.0`
 - 搜索服务、refinement 服务、Agent Router、Agent Orchestrator 单元测试通过
+- comparison 与 interview 服务单元测试通过
 - chat API 与 SSE 事件流测试通过
 
 说明：
@@ -134,6 +154,8 @@ src/main/java/com/recruit/agent
 ├── candidate
 ├── chat
 ├── common
+├── comparison
+├── interview
 ├── position
 ├── rag
 ├── resume
@@ -141,8 +163,7 @@ src/main/java/com/recruit/agent
 
 docs/schema
 ├── mysql-schema-v1.sql
-├── elasticsearch-indexes-v1.json
-└── README.md
+└── elasticsearch-indexes-v1.json
 ```
 
 ## 核心模型
@@ -204,7 +225,7 @@ docker compose up -d
 
 MySQL 启动时会自动执行：
 
-- [mysql-schema-v1.sql](C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/mysql-schema-v1.sql)
+- [mysql-schema-v1.sql](/C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/mysql-schema-v1.sql)
 
 ### 4. 启动应用
 
@@ -241,15 +262,6 @@ java -jar target/recruit-agent-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
 
 - `candidateId`
 - `file`
-
-成功后会返回：
-
-- `documentId`
-- `candidateId`
-- `versionNo`
-- `status`
-- `fileStorageKey`
-- `createdAt`
 
 ### 候选人搜索
 
@@ -290,6 +302,32 @@ java -jar target/recruit-agent-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
 }
 ```
 
+### 候选人对比
+
+`POST /api/comparison/candidates`
+
+请求体示例：
+
+```json
+{
+  "candidateIds": ["candidate-1", "candidate-2"],
+  "targetQuery": "推荐系统"
+}
+```
+
+### 面试题生成
+
+`POST /api/interview/questions`
+
+请求体示例：
+
+```json
+{
+  "candidateIds": ["candidate-1"],
+  "targetQuery": "推荐系统"
+}
+```
+
 ### 普通聊天
 
 `POST /api/chat`
@@ -312,28 +350,28 @@ java -jar target/recruit-agent-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
 
 ## 文档与配置
 
-- 项目规划文档：`NEW_PROJECT_SUMMARY.md`
-- MySQL DDL：[docs/schema/mysql-schema-v1.sql](C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/mysql-schema-v1.sql)
-- Elasticsearch mapping：[docs/schema/elasticsearch-indexes-v1.json](C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/elasticsearch-indexes-v1.json)
-- 本地 Docker 环境：[docker-compose.yml](C:/Users/Type-umr/Desktop/recruit-agent/docker-compose.yml)
-- 本地应用配置：[application-local.yml](C:/Users/Type-umr/Desktop/recruit-agent/src/main/resources/application-local.yml)
+- 项目规划文档：[NEW_PROJECT_SUMMARY.md](/C:/Users/Type-umr/Desktop/recruit-agent/NEW_PROJECT_SUMMARY.md)
+- MySQL DDL：[mysql-schema-v1.sql](/C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/mysql-schema-v1.sql)
+- Elasticsearch mapping：[elasticsearch-indexes-v1.json](/C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/elasticsearch-indexes-v1.json)
+- 本地 Docker 环境：[docker-compose.yml](/C:/Users/Type-umr/Desktop/recruit-agent/docker-compose.yml)
+- 本地应用配置：[application-local.yml](/C:/Users/Type-umr/Desktop/recruit-agent/src/main/resources/application-local.yml)
 
 ## 当前限制
 
-- OCR 目前只有 fallback 接口与编排骨架，尚未接入真实识别引擎
-- 向量字段已预留，但还未接真实 embedding 生成
-- 候选人画像抽取当前为规则式实现，不是 LLM enrichment
-- Search 目前已有 ES 查询与证据召回，但 ranking、query rewrite、vector/hybrid retrieval 仍未完善
-- Router 当前仍以规则式判断 `SEARCH` / `FILTER_REFINE` 为主
-- `compareCandidatesTool`、`generateInterviewQuestionsTool` 还未开始
+- OCR 当前只有 fallback 接口与编排骨架，尚未接入真实识别引擎
+- 向量字段已预留，但还未接入真实 embedding 生成
+- 候选人画像抽取当前仍是规则式实现，不是 LLM enrichment
+- Search 当前已有 ES 查询与证据召回，但 ranking、query rewrite、vector/hybrid retrieval 仍未完善
+- Router 当前仍以规则式判断 `SEARCH` / `FILTER_REFINE` / `COMPARE` / `INTERVIEW` 为主
+- comparison 与 interview 当前是规则式组装，不是基于 LLM 深度生成
 - 当前 token 事件是基于 summary 分片的伪流式输出，不是底层模型的原生 token streaming
-- SSE 目前使用 `SseEmitter`，尚未迁移到 WebFlux
+- SSE 当前使用 `SseEmitter`，尚未迁移到 WebFlux
 
 ## 下一步
 
 建议下一阶段优先从以下方向中选择其一：
 
-- 做 `compareCandidatesTool`，进入候选人对比能力
-- 做 `generateInterviewQuestionsTool`，进入面试提纲生成能力
-- 升级当前 search / router，让模型更深度参与 query 理解与 refinement 解析
+- 升级当前 search / router，让模型更深度参与 query 理解、refinement 解析和候选人选择
+- 为 comparison / interview 增加更稳定的前端展示 payload 与引用协议
 - 将当前 SSE 从 summary 分片流升级为真正的模型 token 流
+- 继续增强检索质量，包括 rerank、query rewrite、vector/hybrid retrieval
