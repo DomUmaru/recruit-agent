@@ -3,8 +3,12 @@ package com.recruit.agent.agent.selection.impl;
 import com.recruit.agent.agent.selection.CandidateSelectionService;
 import com.recruit.agent.chat.state.ChatSessionState;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 /**
@@ -12,6 +16,9 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class CandidateSelectionServiceImpl implements CandidateSelectionService {
+
+    private static final Pattern TOP_N_PATTERN = Pattern.compile("前([0-9一二两三四五六七八九十俩]+)(个|位)?");
+    private static final Pattern ORDINAL_PATTERN = Pattern.compile("第([0-9一二两三四五六七八九十俩]+)(个|位)?");
 
     @Override
     public List<String> resolveSelectedCandidateIds(ChatSessionState state, String userInput) {
@@ -30,19 +37,9 @@ public class CandidateSelectionServiceImpl implements CandidateSelectionService 
             return lastCandidateIds;
         }
 
-        Integer ordinal = extractOrdinal(normalized);
-        if (ordinal != null) {
-            return pickRange(lastCandidateIds, ordinal - 1, ordinal);
-        }
-
-        Integer topN = extractTopN(normalized);
-        if (topN != null) {
-            return pickRange(lastCandidateIds, 0, topN);
-        }
-
         if (containsAny(normalized, "这两个人", "这两个候选人", "这两位", "这俩")) {
             if (state.getSelectedCandidateIds() != null && state.getSelectedCandidateIds().size() >= 2) {
-                return state.getSelectedCandidateIds().subList(0, 2);
+                return new ArrayList<>(state.getSelectedCandidateIds().subList(0, 2));
             }
             return pickRange(lastCandidateIds, 0, 2);
         }
@@ -54,34 +51,78 @@ public class CandidateSelectionServiceImpl implements CandidateSelectionService 
             return pickRange(lastCandidateIds, 0, 1);
         }
 
-        return null;
-    }
+        Integer topN = extractTopN(normalized);
+        List<String> scopedCandidates = topN == null ? lastCandidateIds : pickRange(lastCandidateIds, 0, topN);
 
-    private Integer extractOrdinal(String text) {
-        for (int i = 1; i <= 10; i++) {
-            if (text.contains("第" + i + "个") || text.contains("第" + chineseNumber(i) + "个")
-                || text.contains("第" + i + "位") || text.contains("第" + chineseNumber(i) + "位")
-                || text.contains("第" + colloquialChineseNumber(i) + "个")
-                || text.contains("第" + colloquialChineseNumber(i) + "位")) {
-                return i;
-            }
+        List<Integer> ordinals = extractOrdinals(normalized);
+        if (!ordinals.isEmpty()) {
+            return pickOrdinals(scopedCandidates, ordinals);
         }
+
+        if (topN != null) {
+            return scopedCandidates;
+        }
+
         return null;
     }
 
     private Integer extractTopN(String text) {
-        for (int i = 1; i <= 10; i++) {
-            if (text.contains("前" + i + "个") || text.contains("前" + chineseNumber(i) + "个")
-                || text.contains("前" + i + "位") || text.contains("前" + chineseNumber(i) + "位")
-                || text.contains("前" + colloquialChineseNumber(i) + "个")
-                || text.contains("前" + colloquialChineseNumber(i) + "位")) {
-                return i;
+        Matcher matcher = TOP_N_PATTERN.matcher(text);
+        if (!matcher.find()) {
+            return null;
+        }
+        return parseNumberToken(matcher.group(1));
+    }
+
+    private List<Integer> extractOrdinals(String text) {
+        List<Integer> ordinals = new ArrayList<>();
+        Matcher matcher = ORDINAL_PATTERN.matcher(text);
+        while (matcher.find()) {
+            Integer value = parseNumberToken(matcher.group(1));
+            if (value != null) {
+                ordinals.add(value);
             }
         }
-        if (containsAny(text, "前俩", "前两位")) {
-            return 2;
+        return ordinals;
+    }
+
+    private Integer parseNumberToken(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
         }
-        return null;
+
+        if (token.chars().allMatch(Character::isDigit)) {
+            return Integer.parseInt(token);
+        }
+
+        return switch (token) {
+            case "一" -> 1;
+            case "二", "两", "俩" -> 2;
+            case "三" -> 3;
+            case "四" -> 4;
+            case "五" -> 5;
+            case "六" -> 6;
+            case "七" -> 7;
+            case "八" -> 8;
+            case "九" -> 9;
+            case "十" -> 10;
+            default -> null;
+        };
+    }
+
+    private List<String> pickOrdinals(List<String> source, List<Integer> ordinals) {
+        if (source == null || source.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> result = new LinkedHashSet<>();
+        for (Integer ordinal : ordinals) {
+            if (ordinal == null || ordinal <= 0 || ordinal > source.size()) {
+                continue;
+            }
+            result.add(source.get(ordinal - 1));
+        }
+        return new ArrayList<>(result);
     }
 
     private List<String> pickRange(List<String> source, int startInclusive, int endExclusive) {
@@ -104,28 +145,5 @@ public class CandidateSelectionServiceImpl implements CandidateSelectionService 
 
     private String normalize(String text) {
         return text == null ? "" : text.toLowerCase(Locale.ROOT).trim();
-    }
-
-    private String chineseNumber(int value) {
-        return switch (value) {
-            case 1 -> "一";
-            case 2 -> "二";
-            case 3 -> "三";
-            case 4 -> "四";
-            case 5 -> "五";
-            case 6 -> "六";
-            case 7 -> "七";
-            case 8 -> "八";
-            case 9 -> "九";
-            case 10 -> "十";
-            default -> String.valueOf(value);
-        };
-    }
-
-    private String colloquialChineseNumber(int value) {
-        return switch (value) {
-            case 2 -> "两";
-            default -> chineseNumber(value);
-        };
     }
 }
