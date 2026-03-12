@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
+import com.recruit.agent.rag.embedding.UnavailableEmbeddingService;
 import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
@@ -37,6 +38,7 @@ class CandidateSearchServiceImplTest {
         ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
         CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
             elasticsearchOperations,
+            new UnavailableEmbeddingService(),
             new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
             new DefaultCandidateMatchReasonService(),
             new DefaultCandidateSearchRerankService(new UnavailableRerankService())
@@ -112,6 +114,7 @@ class CandidateSearchServiceImplTest {
         ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
         CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
             elasticsearchOperations,
+            new UnavailableEmbeddingService(),
             new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
             new DefaultCandidateMatchReasonService(),
             new DefaultCandidateSearchRerankService(new UnavailableRerankService())
@@ -149,5 +152,75 @@ class CandidateSearchServiceImplTest {
         assertEquals(1, response.getTotal());
         assertEquals("candidate-1", response.getCandidates().get(0).getCandidateId());
         verify(elasticsearchOperations).search(any(Query.class), eq(CandidateProfileIndex.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldMergeVectorRecallCandidatesWhenKeywordSearchMisses() throws Exception {
+        ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
+        com.recruit.agent.rag.embedding.EmbeddingService embeddingService = org.mockito.Mockito.mock(com.recruit.agent.rag.embedding.EmbeddingService.class);
+        when(embeddingService.isAvailable()).thenReturn(true);
+        when(embeddingService.embedAll(List.of("java 搜索工程师"))).thenReturn(List.of(new float[]{0.1f, 0.2f}));
+
+        CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
+            elasticsearchOperations,
+            embeddingService,
+            new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
+            new DefaultCandidateMatchReasonService(),
+            new DefaultCandidateSearchRerankService(new UnavailableRerankService())
+        );
+
+        SearchHits<CandidateProfileIndex> emptyKeywordHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(emptyKeywordHits.getSearchHits()).thenReturn(List.of());
+        when(emptyKeywordHits.getTotalHits()).thenReturn(0L);
+
+        ResumeChunk vectorChunk = new ResumeChunk();
+        vectorChunk.setId("chunk-1");
+        vectorChunk.setCandidateId("candidate-2");
+        vectorChunk.setContent("负责 Java 搜索平台与召回优化");
+
+        SearchHit<ResumeChunk> vectorChunkHit = org.mockito.Mockito.mock(SearchHit.class);
+        when(vectorChunkHit.getContent()).thenReturn(vectorChunk);
+        when(vectorChunkHit.getScore()).thenReturn(1.8f);
+
+        SearchHits<ResumeChunk> vectorChunkHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(vectorChunkHits.getSearchHits()).thenReturn(List.of(vectorChunkHit));
+
+        CandidateProfileIndex vectorCandidate = new CandidateProfileIndex();
+        vectorCandidate.setCandidateId("candidate-2");
+        vectorCandidate.setCandidateNo("C-002");
+        vectorCandidate.setFullName("李四");
+        vectorCandidate.setProfileSummary("有 Java 搜索相关经验");
+        vectorCandidate.setTechnicalSkills(List.of("Java", "Elasticsearch"));
+
+        SearchHit<CandidateProfileIndex> vectorCandidateHit = org.mockito.Mockito.mock(SearchHit.class);
+        when(vectorCandidateHit.getContent()).thenReturn(vectorCandidate);
+        when(vectorCandidateHit.getScore()).thenReturn(1.0f);
+
+        SearchHits<CandidateProfileIndex> vectorCandidateHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(vectorCandidateHits.getSearchHits()).thenReturn(List.of(vectorCandidateHit));
+        when(vectorCandidateHits.getTotalHits()).thenReturn(1L);
+
+        SearchHits<ResumeChunk> evidenceHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(evidenceHits.getSearchHits()).thenReturn(List.of(vectorChunkHit));
+
+        when(elasticsearchOperations.search(any(Query.class), eq(CandidateProfileIndex.class)))
+            .thenReturn(emptyKeywordHits)
+            .thenReturn(vectorCandidateHits);
+        when(elasticsearchOperations.search(any(Query.class), eq(ResumeChunk.class)))
+            .thenReturn(vectorChunkHits)
+            .thenReturn(evidenceHits);
+
+        CandidateSearchRequest request = new CandidateSearchRequest();
+        request.setQuery("java 搜索工程师");
+        request.setLimit(10);
+        request.setEvidenceLimit(2);
+
+        CandidateSearchResponse response = service.search(request);
+
+        assertEquals(1, response.getTotal());
+        assertEquals("candidate-2", response.getCandidates().get(0).getCandidateId());
+        assertTrue(response.getCandidates().get(0).getMatchScore() > 0.0d);
+        verify(embeddingService).embedAll(List.of("java 搜索工程师"));
     }
 }

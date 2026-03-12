@@ -5,6 +5,7 @@ import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
+import com.recruit.agent.rag.embedding.EmbeddingService;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.normalization.PreparedCandidateSearchRequest;
@@ -17,30 +18,41 @@ import com.recruit.agent.search.vo.CandidateSearchItemVO;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.client.elc.NativeQueryBuilder;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.query.StringQuery;
 import org.springframework.stereotype.Service;
 
 @Service
 public class CandidateSearchServiceImpl implements CandidateSearchService {
 
+    private static final int RRF_WINDOW_SIZE = 60;
+    private static final int VECTOR_CANDIDATE_LIMIT_MULTIPLIER = 3;
+
     private final ElasticsearchOperations elasticsearchOperations;
+    private final EmbeddingService embeddingService;
     private final SearchRequestNormalizationService searchRequestNormalizationService;
     private final CandidateMatchReasonService candidateMatchReasonService;
     private final CandidateSearchRerankService candidateSearchRerankService;
 
     public CandidateSearchServiceImpl(ElasticsearchOperations elasticsearchOperations,
+                                      EmbeddingService embeddingService,
                                       SearchRequestNormalizationService searchRequestNormalizationService,
                                       CandidateMatchReasonService candidateMatchReasonService,
                                       CandidateSearchRerankService candidateSearchRerankService) {
         this.elasticsearchOperations = elasticsearchOperations;
+        this.embeddingService = embeddingService;
         this.searchRequestNormalizationService = searchRequestNormalizationService;
         this.candidateMatchReasonService = candidateMatchReasonService;
         this.candidateSearchRerankService = candidateSearchRerankService;
@@ -52,22 +64,54 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         String query = safeText(prepared.getQuery());
         CandidateSearchFilter filter = prepared.getFilter() == null ? new CandidateSearchFilter() : prepared.getFilter();
         List<String> queryTerms = tokenize(query);
+        Optional<float[]> queryEmbedding = resolveQueryEmbedding(query);
 
-        SearchHits<CandidateProfileIndex> searchHits = elasticsearchOperations.search(
+        SearchHits<CandidateProfileIndex> keywordHits = elasticsearchOperations.search(
             buildCandidateSearchQuery(query, filter, prepared.getScopeCandidateIds(), queryTerms, prepared.getLimit()),
             CandidateProfileIndex.class
         );
 
-        List<CandidateSearchItemVO> candidates = searchHits.getSearchHits().stream()
+        List<CandidateSearchHit> mergedHits = mergeHybridHits(
+            keywordHits,
+            queryEmbedding,
+            query,
+            filter,
+            prepared.getScopeCandidateIds(),
+            prepared.getLimit()
+        );
+
+        List<CandidateSearchItemVO> candidates = mergedHits.stream()
             .map(hit -> toItem(hit, query, queryTerms, filter, prepared.getEvidenceLimit()))
             .toList();
         candidates = candidateSearchRerankService.rerank(query, candidates);
 
         CandidateSearchResponse response = new CandidateSearchResponse();
         response.setQuery(query);
-        response.setTotal(Math.toIntExact(searchHits.getTotalHits()));
+        response.setTotal(mergedHits.size());
         response.setCandidates(candidates);
         return response;
+    }
+
+    private List<CandidateSearchHit> mergeHybridHits(SearchHits<CandidateProfileIndex> keywordHits,
+                                                     Optional<float[]> queryEmbedding,
+                                                     String query,
+                                                     CandidateSearchFilter filter,
+                                                     List<String> scopeCandidateIds,
+                                                     int limit) {
+        List<CandidateSearchHit> keywordCandidates = keywordHits.getSearchHits().stream()
+            .map(hit -> new CandidateSearchHit(hit.getContent(), resolveMatchScore(hit)))
+            .toList();
+
+        if (query.isBlank() || queryEmbedding.isEmpty()) {
+            return keywordCandidates;
+        }
+
+        List<CandidateSearchHit> vectorCandidates = loadVectorCandidates(queryEmbedding.get(), filter, scopeCandidateIds, limit);
+        if (vectorCandidates.isEmpty()) {
+            return keywordCandidates;
+        }
+
+        return fuseCandidates(keywordCandidates, vectorCandidates, limit);
     }
 
     private NativeQuery buildCandidateSearchQuery(String query,
@@ -183,7 +227,15 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                                          List<String> queryTerms,
                                          CandidateSearchFilter filter,
                                          int evidenceLimit) {
-        CandidateProfileIndex profile = hit.getContent();
+        return toItem(new CandidateSearchHit(hit.getContent(), resolveMatchScore(hit)), query, queryTerms, filter, evidenceLimit);
+    }
+
+    private CandidateSearchItemVO toItem(CandidateSearchHit hit,
+                                         String query,
+                                         List<String> queryTerms,
+                                         CandidateSearchFilter filter,
+                                         int evidenceLimit) {
+        CandidateProfileIndex profile = hit.profile();
         CandidateSearchItemVO item = new CandidateSearchItemVO();
         item.setCandidateId(profile.getCandidateId());
         item.setCandidateNo(profile.getCandidateNo());
@@ -197,7 +249,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         item.setBigTech(profile.getBigTech());
         item.setOutsourcing(profile.getOutsourcing());
         item.setProfileSummary(profile.getProfileSummary());
-        item.setMatchScore(resolveMatchScore(hit));
+        item.setMatchScore(hit.score());
         item.setMatchReasons(candidateMatchReasonService.buildMatchReasons(profile, query, queryTerms, filter));
         item.setEvidenceList(loadEvidence(profile.getCandidateId(), query, queryTerms, evidenceLimit));
         return item;
@@ -238,6 +290,163 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
             .withQuery(buildEvidenceQueryDsl(candidateId, query, queryTerms))
             .withPageable(PageRequest.of(0, evidenceLimit))
             .build();
+    }
+
+    private List<CandidateSearchHit> loadVectorCandidates(float[] queryEmbedding,
+                                                          CandidateSearchFilter filter,
+                                                          List<String> scopeCandidateIds,
+                                                          int limit) {
+        SearchHits<ResumeChunk> vectorHits = elasticsearchOperations.search(
+            buildVectorChunkSearchQuery(queryEmbedding, scopeCandidateIds, limit * VECTOR_CANDIDATE_LIMIT_MULTIPLIER),
+            ResumeChunk.class
+        );
+
+        Map<String, Double> candidateScores = aggregateCandidateVectorScores(vectorHits);
+        if (candidateScores.isEmpty()) {
+            return List.of();
+        }
+
+        SearchHits<CandidateProfileIndex> profileHits = elasticsearchOperations.search(
+            buildCandidateIdsQuery(new ArrayList<>(candidateScores.keySet()), filter),
+            CandidateProfileIndex.class
+        );
+
+        return profileHits.getSearchHits().stream()
+            .map(SearchHit::getContent)
+            .map(profile -> new CandidateSearchHit(
+                profile,
+                normalizeScore(candidateScores.get(profile.getCandidateId()))))
+            .sorted(Comparator.comparing(CandidateSearchHit::score).reversed()
+                .thenComparing(hit -> safeText(hit.profile().getCandidateNo())))
+            .limit(limit)
+            .toList();
+    }
+
+    private org.springframework.data.elasticsearch.core.query.Query buildVectorChunkSearchQuery(float[] queryEmbedding,
+                                                                                                 List<String> scopeCandidateIds,
+                                                                                                 int limit) {
+        String baseQueryJson = buildVectorBaseQueryJson(scopeCandidateIds);
+        String vectorJson = buildVectorJson(queryEmbedding);
+        String queryJson = """
+            {
+              "script_score": {
+                "query": %s,
+                "script": {
+                  "source": "cosineSimilarity(params.queryVector, 'embedding') + 1.0",
+                  "params": {
+                    "queryVector": %s
+                  }
+                }
+              }
+            }
+            """.formatted(baseQueryJson, vectorJson);
+
+        StringQuery query = new StringQuery(queryJson);
+        query.setPageable(PageRequest.of(0, limit));
+        return query;
+    }
+
+    private NativeQuery buildCandidateIdsQuery(List<String> candidateIds, CandidateSearchFilter filter) {
+        List<Query> filters = new ArrayList<>();
+        filters.add(Query.of(q -> q.terms(t -> t
+            .field("candidateId")
+            .terms(values -> values.value(candidateIds.stream()
+                .filter(Objects::nonNull)
+                .map(FieldValue::of)
+                .toList())))));
+
+        if (filter.getHighestDegrees() != null && !filter.getHighestDegrees().isEmpty()) {
+            filters.add(Query.of(q -> q.terms(t -> t
+                .field("highestDegree")
+                .terms(values -> values.value(filter.getHighestDegrees().stream()
+                    .map(Enum::name)
+                    .map(FieldValue::of)
+                    .toList())))));
+        }
+        if (filter.getSchoolTiers() != null && !filter.getSchoolTiers().isEmpty()) {
+            filters.add(Query.of(q -> q.terms(t -> t
+                .field("schoolTier")
+                .terms(values -> values.value(filter.getSchoolTiers().stream()
+                    .map(Enum::name)
+                    .map(FieldValue::of)
+                    .toList())))));
+        }
+        if (filter.getMinYearsOfExperience() != null) {
+            filters.add(Query.of(q -> q.range(r -> r
+                .number(n -> n
+                    .field("totalYearsOfExperience")
+                    .gte(filter.getMinYearsOfExperience().doubleValue())))));
+        }
+        if (filter.getTechnicalSkills() != null && !filter.getTechnicalSkills().isEmpty()) {
+            filter.getTechnicalSkills().forEach(skill -> filters.add(Query.of(q -> q.term(t -> t
+                .field("technicalSkills")
+                .value(FieldValue.of(skill))))));
+        }
+        if (filter.getCurrentCity() != null && !filter.getCurrentCity().isBlank()) {
+            filters.add(Query.of(q -> q.term(t -> t
+                .field("currentCity")
+                .value(FieldValue.of(filter.getCurrentCity())))));
+        }
+        if (filter.getBigTech() != null) {
+            filters.add(Query.of(q -> q.term(t -> t
+                .field("bigTech")
+                .value(FieldValue.of(filter.getBigTech())))));
+        }
+        if (filter.getOutsourcing() != null) {
+            filters.add(Query.of(q -> q.term(t -> t
+                .field("outsourcing")
+                .value(FieldValue.of(filter.getOutsourcing())))));
+        }
+
+        return new NativeQueryBuilder()
+            .withQuery(Query.of(q -> q.bool(b -> b.filter(filters))))
+            .withPageable(PageRequest.of(0, Math.max(candidateIds.size(), 1)))
+            .build();
+    }
+
+    private Map<String, Double> aggregateCandidateVectorScores(SearchHits<ResumeChunk> vectorHits) {
+        Map<String, Double> aggregated = new LinkedHashMap<>();
+        if (vectorHits == null || vectorHits.getSearchHits() == null) {
+            return aggregated;
+        }
+        for (SearchHit<ResumeChunk> hit : vectorHits.getSearchHits()) {
+            ResumeChunk chunk = hit.getContent();
+            if (chunk == null || chunk.getCandidateId() == null || chunk.getCandidateId().isBlank()) {
+                continue;
+            }
+            double score = resolveMatchScore(hit);
+            aggregated.merge(chunk.getCandidateId(), score, Math::max);
+        }
+        return aggregated;
+    }
+
+    private List<CandidateSearchHit> fuseCandidates(List<CandidateSearchHit> keywordCandidates,
+                                                    List<CandidateSearchHit> vectorCandidates,
+                                                    int limit) {
+        Map<String, CandidateFusionState> states = new LinkedHashMap<>();
+
+        applyRrf(states, keywordCandidates);
+        applyRrf(states, vectorCandidates);
+
+        return states.values().stream()
+            .sorted(Comparator.comparing(CandidateFusionState::fusedScore).reversed()
+                .thenComparing(state -> safeText(state.profile().getCandidateNo())))
+            .limit(limit)
+            .map(state -> new CandidateSearchHit(state.profile(), state.fusedScore()))
+            .toList();
+    }
+
+    private void applyRrf(Map<String, CandidateFusionState> states, List<CandidateSearchHit> hits) {
+        for (int index = 0; index < hits.size(); index++) {
+            CandidateSearchHit hit = hits.get(index);
+            String candidateId = hit.profile().getCandidateId();
+            if (candidateId == null || candidateId.isBlank()) {
+                continue;
+            }
+            CandidateFusionState state = states.computeIfAbsent(candidateId,
+                ignored -> new CandidateFusionState(hit.profile(), 0.0d));
+            state.addRrf(1.0d / (RRF_WINDOW_SIZE + index + 1));
+        }
     }
 
     private Query buildEvidenceQueryDsl(String candidateId, String query, List<String> queryTerms) {
@@ -289,5 +498,91 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
 
     private String safeText(String text) {
         return text == null ? "" : text;
+    }
+
+    private String buildVectorBaseQueryJson(List<String> scopeCandidateIds) {
+        if (scopeCandidateIds == null || scopeCandidateIds.isEmpty()) {
+            return "{\"match_all\":{}}";
+        }
+        String idsJson = scopeCandidateIds.stream()
+            .filter(Objects::nonNull)
+            .map(this::toJsonString)
+            .reduce((left, right) -> left + "," + right)
+            .orElse("");
+        return """
+            {
+              "bool": {
+                "filter": [
+                  {
+                    "terms": {
+                      "candidateId": [%s]
+                    }
+                  }
+                ]
+              }
+            }
+            """.formatted(idsJson);
+    }
+
+    private String buildVectorJson(float[] queryEmbedding) {
+        StringBuilder builder = new StringBuilder("[");
+        for (int index = 0; index < queryEmbedding.length; index++) {
+            if (index > 0) {
+                builder.append(',');
+            }
+            builder.append(queryEmbedding[index]);
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private String toJsonString(String value) {
+        String safe = value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
+        return "\"" + safe + "\"";
+    }
+
+    private Optional<float[]> resolveQueryEmbedding(String query) {
+        if (query == null || query.isBlank() || !embeddingService.isAvailable()) {
+            return Optional.empty();
+        }
+        try {
+            List<float[]> embeddings = embeddingService.embedAll(List.of(query));
+            if (embeddings == null || embeddings.isEmpty() || embeddings.get(0) == null || embeddings.get(0).length == 0) {
+                return Optional.empty();
+            }
+            return Optional.of(embeddings.get(0));
+        } catch (Exception exception) {
+            return Optional.empty();
+        }
+    }
+
+    private double normalizeScore(Double score) {
+        return score != null && Double.isFinite(score) ? score : 0.0d;
+    }
+
+    private record CandidateSearchHit(CandidateProfileIndex profile, double score) {
+    }
+
+    private static final class CandidateFusionState {
+
+        private final CandidateProfileIndex profile;
+        private double fusedScore;
+
+        private CandidateFusionState(CandidateProfileIndex profile, double fusedScore) {
+            this.profile = profile;
+            this.fusedScore = fusedScore;
+        }
+
+        private CandidateProfileIndex profile() {
+            return profile;
+        }
+
+        private double fusedScore() {
+            return fusedScore;
+        }
+
+        private void addRrf(double delta) {
+            this.fusedScore += delta;
+        }
     }
 }
