@@ -40,5 +40,11 @@ app:
     connect-timeout-ms: 10000
     read-timeout-ms: 120000
     dimension: 1024
+  rerank:
+    provider: bge-reranker-v2-m3
+    base-url: http://localhost:9003
+    rerank-path: /api/rerank
+    connect-timeout-ms: 10000
+    read-timeout-ms: 180000
   resume:
     upload-dir: data/uploads/resumes

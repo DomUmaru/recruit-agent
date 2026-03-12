@@ -40,6 +40,8 @@ public class CandidateSearchItemVO {
 
     private double matchScore;
 
+    private Double rerankScore;
+
     private List<String> matchReasons;
 
     private List<CandidateSearchEvidenceVO> evidenceList;

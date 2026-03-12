@@ -10,6 +10,7 @@ import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.normalization.PreparedCandidateSearchRequest;
 import com.recruit.agent.search.normalization.SearchRequestNormalizationService;
 import com.recruit.agent.search.reason.CandidateMatchReasonService;
+import com.recruit.agent.search.rerank.CandidateSearchRerankService;
 import com.recruit.agent.search.service.CandidateSearchService;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
@@ -33,13 +34,16 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
     private final ElasticsearchOperations elasticsearchOperations;
     private final SearchRequestNormalizationService searchRequestNormalizationService;
     private final CandidateMatchReasonService candidateMatchReasonService;
+    private final CandidateSearchRerankService candidateSearchRerankService;
 
     public CandidateSearchServiceImpl(ElasticsearchOperations elasticsearchOperations,
                                       SearchRequestNormalizationService searchRequestNormalizationService,
-                                      CandidateMatchReasonService candidateMatchReasonService) {
+                                      CandidateMatchReasonService candidateMatchReasonService,
+                                      CandidateSearchRerankService candidateSearchRerankService) {
         this.elasticsearchOperations = elasticsearchOperations;
         this.searchRequestNormalizationService = searchRequestNormalizationService;
         this.candidateMatchReasonService = candidateMatchReasonService;
+        this.candidateSearchRerankService = candidateSearchRerankService;
     }
 
     @Override
@@ -57,6 +61,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         List<CandidateSearchItemVO> candidates = searchHits.getSearchHits().stream()
             .map(hit -> toItem(hit, query, queryTerms, filter, prepared.getEvidenceLimit()))
             .toList();
+        candidates = candidateSearchRerankService.rerank(query, candidates);
 
         CandidateSearchResponse response = new CandidateSearchResponse();
         response.setQuery(query);

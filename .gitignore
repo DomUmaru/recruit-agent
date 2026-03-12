@@ -42,3 +42,8 @@ python/embedding-service/.cache/
 python/embedding-service/*.log
 python/embedding-service/*.pid
 python/embedding-service/__pycache__/
+python/rerank-service/.venv/
+python/rerank-service/.cache/
+python/rerank-service/*.log
+python/rerank-service/*.pid
+python/rerank-service/__pycache__/

@@ -16,6 +16,8 @@ import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.normalization.impl.SearchRequestNormalizationServiceImpl;
 import com.recruit.agent.search.parser.impl.RuleBasedNaturalLanguageSearchFilterParser;
 import com.recruit.agent.search.reason.impl.DefaultCandidateMatchReasonService;
+import com.recruit.agent.search.rerank.impl.DefaultCandidateSearchRerankService;
+import com.recruit.agent.search.rerank.UnavailableRerankService;
 import com.recruit.agent.search.service.impl.CandidateSearchServiceImpl;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
 import java.math.BigDecimal;
@@ -35,7 +37,8 @@ class CandidateSearchServiceImplTest {
         CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
             elasticsearchOperations,
             new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
-            new DefaultCandidateMatchReasonService()
+            new DefaultCandidateMatchReasonService(),
+            new DefaultCandidateSearchRerankService(new UnavailableRerankService())
         );
 
         CandidateProfileIndex matched = new CandidateProfileIndex();
@@ -108,7 +111,8 @@ class CandidateSearchServiceImplTest {
         CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
             elasticsearchOperations,
             new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
-            new DefaultCandidateMatchReasonService()
+            new DefaultCandidateMatchReasonService(),
+            new DefaultCandidateSearchRerankService(new UnavailableRerankService())
         );
 
         CandidateProfileIndex matched = new CandidateProfileIndex();
