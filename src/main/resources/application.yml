@@ -1,6 +1,11 @@
 spring:
   application:
     name: recruit-agent
+  ai:
+    model:
+      chat: none
+    openai:
+      api-key: ${OPENAI_API_KEY:}
   datasource:
     url: jdbc:mysql://localhost:3306/recruit_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
