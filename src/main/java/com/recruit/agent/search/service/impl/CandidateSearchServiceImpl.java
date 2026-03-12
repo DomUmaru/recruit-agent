@@ -3,11 +3,11 @@ package com.recruit.agent.search.service.impl;
 import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
-import co.elastic.clients.json.JsonData;
 import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
+import com.recruit.agent.search.parser.NaturalLanguageSearchFilterParser;
 import com.recruit.agent.search.service.CandidateSearchService;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
@@ -36,16 +36,23 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
     private static final int DEFAULT_EVIDENCE_LIMIT = 3;
 
     private final ElasticsearchOperations elasticsearchOperations;
+    private final NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser;
 
-    public CandidateSearchServiceImpl(ElasticsearchOperations elasticsearchOperations) {
+    public CandidateSearchServiceImpl(ElasticsearchOperations elasticsearchOperations,
+                                      NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser) {
         this.elasticsearchOperations = elasticsearchOperations;
+        this.naturalLanguageSearchFilterParser = naturalLanguageSearchFilterParser;
     }
 
     @Override
     public CandidateSearchResponse search(CandidateSearchRequest request) {
         CandidateSearchRequest safeRequest = request == null ? new CandidateSearchRequest() : request;
-        CandidateSearchFilter filter = safeRequest.getFilter() == null ? new CandidateSearchFilter() : safeRequest.getFilter();
-        String query = safeText(safeRequest.getQuery());
+        String rawQuery = safeText(safeRequest.getQuery());
+        String query = safeText(naturalLanguageSearchFilterParser.stripFilterTerms(rawQuery));
+        CandidateSearchFilter filter = mergeFilter(
+            safeRequest.getFilter() == null ? new CandidateSearchFilter() : safeRequest.getFilter(),
+            naturalLanguageSearchFilterParser.parse(rawQuery)
+        );
         List<String> queryTerms = tokenize(query);
         int limit = normalizeCandidateLimit(safeRequest.getLimit());
         int evidenceLimit = normalizeEvidenceLimit(safeRequest.getEvidenceLimit());
@@ -116,8 +123,9 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
 
         if (filter.getMinYearsOfExperience() != null) {
             filters.add(Query.of(q -> q.range(r -> r
-                .field("totalYearsOfExperience")
-                .gte(JsonData.of(filter.getMinYearsOfExperience())))));
+                .number(n -> n
+                    .field("totalYearsOfExperience")
+                    .gte(filter.getMinYearsOfExperience().doubleValue())))));
         }
 
         if (filter.getTechnicalSkills() != null && !filter.getTechnicalSkills().isEmpty()) {
@@ -334,5 +342,67 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
             return DEFAULT_EVIDENCE_LIMIT;
         }
         return limit;
+    }
+
+    private CandidateSearchFilter mergeFilter(CandidateSearchFilter explicitFilter, CandidateSearchFilter parsedFilter) {
+        CandidateSearchFilter merged = new CandidateSearchFilter();
+        merged.setHighestDegrees(mergeList(
+            explicitFilter == null ? null : explicitFilter.getHighestDegrees(),
+            parsedFilter == null ? null : parsedFilter.getHighestDegrees()
+        ));
+        merged.setSchoolTiers(mergeList(
+            explicitFilter == null ? null : explicitFilter.getSchoolTiers(),
+            parsedFilter == null ? null : parsedFilter.getSchoolTiers()
+        ));
+        merged.setTechnicalSkills(mergeList(
+            explicitFilter == null ? null : explicitFilter.getTechnicalSkills(),
+            parsedFilter == null ? null : parsedFilter.getTechnicalSkills()
+        ));
+        merged.setMinYearsOfExperience(max(
+            explicitFilter == null ? null : explicitFilter.getMinYearsOfExperience(),
+            parsedFilter == null ? null : parsedFilter.getMinYearsOfExperience()
+        ));
+        merged.setCurrentCity(hasText(explicitFilter == null ? null : explicitFilter.getCurrentCity())
+            ? explicitFilter.getCurrentCity()
+            : parsedFilter == null ? null : parsedFilter.getCurrentCity());
+        merged.setBigTech(explicitFilter != null && explicitFilter.getBigTech() != null
+            ? explicitFilter.getBigTech()
+            : parsedFilter == null ? null : parsedFilter.getBigTech());
+        merged.setOutsourcing(explicitFilter != null && explicitFilter.getOutsourcing() != null
+            ? explicitFilter.getOutsourcing()
+            : parsedFilter == null ? null : parsedFilter.getOutsourcing());
+        return merged;
+    }
+
+    private <T> List<T> mergeList(List<T> left, List<T> right) {
+        if ((left == null || left.isEmpty()) && (right == null || right.isEmpty())) {
+            return null;
+        }
+        List<T> merged = new ArrayList<>();
+        if (left != null) {
+            merged.addAll(left);
+        }
+        if (right != null) {
+            for (T value : right) {
+                if (!merged.contains(value)) {
+                    merged.add(value);
+                }
+            }
+        }
+        return merged;
+    }
+
+    private BigDecimal max(BigDecimal left, BigDecimal right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.compareTo(right) >= 0 ? left : right;
+    }
+
+    private boolean hasText(String text) {
+        return text != null && !text.isBlank();
     }
 }

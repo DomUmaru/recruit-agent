@@ -12,6 +12,7 @@ import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
+import com.recruit.agent.search.parser.impl.RuleBasedNaturalLanguageSearchFilterParser;
 import com.recruit.agent.search.service.impl.CandidateSearchServiceImpl;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
 import java.math.BigDecimal;
@@ -28,7 +29,10 @@ class CandidateSearchServiceImplTest {
     @SuppressWarnings("unchecked")
     void shouldSearchByQueryAndFilterAndReturnEvidence() {
         ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
-        CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(elasticsearchOperations);
+        CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
+            elasticsearchOperations,
+            new RuleBasedNaturalLanguageSearchFilterParser()
+        );
 
         CandidateProfileIndex matched = new CandidateProfileIndex();
         matched.setId("idx-1");
@@ -101,6 +105,7 @@ class CandidateSearchServiceImplTest {
 
         assertEquals(1, response.getTotal());
         assertEquals("candidate-1", response.getCandidates().get(0).getCandidateId());
+        assertEquals("上海", response.getCandidates().get(0).getCurrentCity());
         assertFalse(response.getCandidates().get(0).getEvidenceList().isEmpty());
         assertFalse(response.getCandidates().get(0).getMatchReasons().isEmpty());
     }

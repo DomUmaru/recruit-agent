@@ -4,6 +4,7 @@ import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRefineRequest;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.dto.FilterMergeMode;
+import com.recruit.agent.search.parser.NaturalLanguageSearchFilterParser;
 import com.recruit.agent.search.service.CandidateSearchRefinementService;
 import com.recruit.agent.search.service.CandidateSearchService;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
@@ -21,9 +22,12 @@ import org.springframework.stereotype.Service;
 public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefinementService {
 
     private final CandidateSearchService candidateSearchService;
+    private final NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser;
 
-    public CandidateSearchRefinementServiceImpl(CandidateSearchService candidateSearchService) {
+    public CandidateSearchRefinementServiceImpl(CandidateSearchService candidateSearchService,
+                                                NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser) {
         this.candidateSearchService = candidateSearchService;
+        this.naturalLanguageSearchFilterParser = naturalLanguageSearchFilterParser;
     }
 
     @Override
@@ -31,7 +35,12 @@ public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefi
         CandidateSearchRefineRequest safeRequest = request == null ? new CandidateSearchRefineRequest() : request;
         CandidateSearchRequest baseRequest = safeRequest.getBaseRequest() == null ? new CandidateSearchRequest() : safeRequest.getBaseRequest();
         CandidateSearchFilter baseFilter = copyFilter(baseRequest.getFilter());
-        CandidateSearchFilter refinementFilter = safeFilter(safeRequest.getRefinementFilter());
+        CandidateSearchFilter parsedRefinementFilter = naturalLanguageSearchFilterParser.parse(safeRequest.getRefinementQuery());
+        CandidateSearchFilter refinementFilter = mergeFilter(
+            safeFilter(safeRequest.getRefinementFilter()),
+            safeFilter(parsedRefinementFilter),
+            FilterMergeMode.APPEND
+        );
         FilterMergeMode mergeMode = safeRequest.getMergeMode() == null ? FilterMergeMode.APPEND : safeRequest.getMergeMode();
 
         CandidateSearchRequest merged = new CandidateSearchRequest();
@@ -50,7 +59,7 @@ public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefi
 
     private String mergeQuery(String baseQuery, String refinementQuery, FilterMergeMode mergeMode) {
         String normalizedBase = safeText(baseQuery).trim();
-        String normalizedRefinement = safeText(refinementQuery).trim();
+        String normalizedRefinement = safeText(naturalLanguageSearchFilterParser.stripFilterTerms(refinementQuery)).trim();
 
         if (normalizedRefinement.isBlank()) {
             return normalizedBase;

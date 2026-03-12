@@ -12,6 +12,7 @@ import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRefineRequest;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.dto.FilterMergeMode;
+import com.recruit.agent.search.parser.impl.RuleBasedNaturalLanguageSearchFilterParser;
 import com.recruit.agent.search.service.impl.CandidateSearchRefinementServiceImpl;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
 import java.math.BigDecimal;
@@ -23,7 +24,10 @@ class CandidateSearchRefinementServiceImplTest {
     @Test
     void shouldAppendQueryAndMergeFiltersForRefinement() {
         CandidateSearchService candidateSearchService = org.mockito.Mockito.mock(CandidateSearchService.class);
-        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(candidateSearchService);
+        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(
+            candidateSearchService,
+            new RuleBasedNaturalLanguageSearchFilterParser()
+        );
 
         CandidateSearchFilter baseFilter = new CandidateSearchFilter();
         baseFilter.setHighestDegrees(List.of(DegreeLevel.BACHELOR));
@@ -43,24 +47,28 @@ class CandidateSearchRefinementServiceImplTest {
 
         CandidateSearchRefineRequest refineRequest = new CandidateSearchRefineRequest();
         refineRequest.setBaseRequest(baseRequest);
-        refineRequest.setRefinementQuery("Java");
+        refineRequest.setRefinementQuery("Java 985 5年 上海");
         refineRequest.setRefinementFilter(refinementFilter);
         refineRequest.setMergeMode(FilterMergeMode.APPEND);
 
         CandidateSearchRequest merged = service.merge(refineRequest);
 
-        assertEquals("推荐系统 Java", merged.getQuery());
+        assertEquals("推荐系统 java", merged.getQuery());
         assertIterableEquals(List.of(DegreeLevel.BACHELOR), merged.getFilter().getHighestDegrees());
         assertIterableEquals(List.of(SchoolTier.PROJECT_985), merged.getFilter().getSchoolTiers());
         assertIterableEquals(List.of("Java", "Elasticsearch"), merged.getFilter().getTechnicalSkills());
         assertEquals(new BigDecimal("5.0"), merged.getFilter().getMinYearsOfExperience());
+        assertEquals("上海", merged.getFilter().getCurrentCity());
         assertIterableEquals(List.of("candidate-1", "candidate-2"), merged.getScopeCandidateIds());
     }
 
     @Test
     void shouldReplaceQueryFilterAndScopeDuringRefinementSearch() {
         CandidateSearchService candidateSearchService = org.mockito.Mockito.mock(CandidateSearchService.class);
-        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(candidateSearchService);
+        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(
+            candidateSearchService,
+            new RuleBasedNaturalLanguageSearchFilterParser()
+        );
 
         CandidateSearchRequest baseRequest = new CandidateSearchRequest();
         baseRequest.setQuery("推荐系统");
