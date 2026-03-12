@@ -12,7 +12,13 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 /**
- * 基于规则的候选人选择解析服务。
+ * 基于规则的候选人选择解析器。
+ * 这一层只处理 compare / interview 前置的“选人”语义，例如：
+ * - 前两个
+ * - 第一个和第三个
+ * - 全部
+ *
+ * 它不负责搜索，也不负责真正的对比/出题，只负责把自然语言映射成 selectedCandidateIds。
  */
 @Service
 public class CandidateSelectionServiceImpl implements CandidateSelectionService {
@@ -22,6 +28,7 @@ public class CandidateSelectionServiceImpl implements CandidateSelectionService 
 
     @Override
     public List<String> resolveSelectedCandidateIds(ChatSessionState state, String userInput) {
+        // 没有历史候选集时，无法做“第几个/前几个”这类选择，直接返回 null 交由上层决定是否降级。
         if (state == null || userInput == null || userInput.isBlank()) {
             return null;
         }
@@ -33,10 +40,12 @@ public class CandidateSelectionServiceImpl implements CandidateSelectionService 
 
         String normalized = normalize(userInput);
 
+        // “全部”表示直接选中上一轮整个候选集。
         if (containsAny(normalized, "全部", "所有人", "所有候选人", "全部候选人", "all")) {
             return lastCandidateIds;
         }
 
+        // “这两个人”优先复用已选集合，否则回退到上一轮结果集前两位。
         if (containsAny(normalized, "这两个人", "这两个候选人", "这两位", "这俩")) {
             if (state.getSelectedCandidateIds() != null && state.getSelectedCandidateIds().size() >= 2) {
                 return new ArrayList<>(state.getSelectedCandidateIds().subList(0, 2));
@@ -44,6 +53,7 @@ public class CandidateSelectionServiceImpl implements CandidateSelectionService 
             return pickRange(lastCandidateIds, 0, 2);
         }
 
+        // “这个人”语义类似，优先基于当前 selectedCandidateIds，再回退到上轮首位。
         if (containsAny(normalized, "这个人", "这位", "这个候选人")) {
             if (state.getSelectedCandidateIds() != null && !state.getSelectedCandidateIds().isEmpty()) {
                 return List.of(state.getSelectedCandidateIds().get(0));
@@ -54,6 +64,7 @@ public class CandidateSelectionServiceImpl implements CandidateSelectionService 
         Integer topN = extractTopN(normalized);
         List<String> scopedCandidates = topN == null ? lastCandidateIds : pickRange(lastCandidateIds, 0, topN);
 
+        // “第一个、第三个”是对 scopedCandidates 的 ordinal 选择。
         List<Integer> ordinals = extractOrdinals(normalized);
         if (!ordinals.isEmpty()) {
             return pickOrdinals(scopedCandidates, ordinals);
@@ -115,6 +126,7 @@ public class CandidateSelectionServiceImpl implements CandidateSelectionService 
             return List.of();
         }
 
+        // 用 LinkedHashSet 去重并保持用户表达中的顺序，避免“第一个和第一个”这类重复结果。
         Set<String> result = new LinkedHashSet<>();
         for (Integer ordinal : ordinals) {
             if (ordinal == null || ordinal <= 0 || ordinal > source.size()) {

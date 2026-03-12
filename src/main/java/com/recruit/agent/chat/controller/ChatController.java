@@ -16,7 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
- * 聊天接口控制器。
+ * Chat API 入口。
+ * 这一层只负责接收请求和返回协议结果，不承载招聘业务编排。
  */
 @RestController
 @RequestMapping("/api/chat")
@@ -30,6 +31,7 @@ public class ChatController {
 
     /**
      * 普通聊天接口。
+     * 一次性返回本轮执行后的聚合结果。
      *
      * @param request 聊天请求
      * @return 聊天响应
@@ -41,6 +43,7 @@ public class ChatController {
 
     /**
      * SSE 流式聊天接口。
+     * 业务仍然在下游统一执行，这里只是把应用层生成的事件列表逐条写给前端。
      *
      * @param request 聊天请求
      * @return SSE 发射器
@@ -68,7 +71,7 @@ public class ChatController {
         try {
             emitter.send(SseEmitter.event().name("error").data(payload));
         } catch (IOException ignored) {
-            // Ignore secondary write failure when completing the stream.
+            // 这里已经在错误收尾流程中，二次写出失败不再额外处理。
         }
     }
 

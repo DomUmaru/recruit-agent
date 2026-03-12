@@ -9,7 +9,9 @@ import java.util.Locale;
 import org.springframework.stereotype.Service;
 
 /**
- * Agent 路由服务实现。
+ * Agent 路由器。
+ * 作用是把用户输入粗分到具体业务场景，而不是直接做搜索或对比。
+ * 当前是规则式路由：根据关键词和会话历史在 SEARCH / FILTER_REFINE / COMPARE / INTERVIEW 中选择。
  */
 @Service
 public class AgentRouterServiceImpl implements AgentRouterService {
@@ -41,11 +43,13 @@ public class AgentRouterServiceImpl implements AgentRouterService {
         boolean interviewIntent = hasHistory && isInterviewIntent(userInput);
 
         AgentRouteDecision decision = new AgentRouteDecision();
+
+        // 面试题和对比都依赖上轮候选人范围，因此要求存在历史状态。
         if (interviewIntent) {
             decision.setScene(ChatScene.INTERVIEW);
             decision.setToolName(INTERVIEW_TOOL_NAME);
             decision.setHistoryRequired(true);
-            decision.setReason("检测到面试题生成语义，且会话中存在可复用候选人范围");
+            decision.setReason("检测到面试题生成语义，且会话中存在可复用的候选人范围");
             return decision;
         }
 
@@ -53,7 +57,7 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             decision.setScene(ChatScene.COMPARE);
             decision.setToolName(COMPARE_TOOL_NAME);
             decision.setHistoryRequired(true);
-            decision.setReason("检测到候选人对比语义，且会话中存在可复用候选人列表");
+            decision.setReason("检测到候选人对比语义，且会话中存在可复用的候选人列表");
             return decision;
         }
 
@@ -61,10 +65,11 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             decision.setScene(ChatScene.FILTER_REFINE);
             decision.setToolName(REFINE_TOOL_NAME);
             decision.setHistoryRequired(true);
-            decision.setReason("检测到追加或覆盖筛选语义，且会话中存在可复用搜索历史");
+            decision.setReason("检测到追加或覆盖筛选语义，且会话中存在可复用的搜索历史");
             return decision;
         }
 
+        // 默认兜底到 SEARCH，表示把当前输入当成一轮新的招聘搜索需求。
         decision.setScene(ChatScene.SEARCH);
         decision.setToolName(SEARCH_TOOL_NAME);
         decision.setHistoryRequired(false);
@@ -75,6 +80,7 @@ public class AgentRouterServiceImpl implements AgentRouterService {
     }
 
     private boolean hasHistory(AgentRoutingContext context) {
+        // 这里的“历史”不是完整聊天记录，而是当前任务链继续执行所需的最小上下文。
         return context.getCurrentScene() != null
             || hasText(context.getCurrentQuery())
             || hasText(context.getFiltersJson())

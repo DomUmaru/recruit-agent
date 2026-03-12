@@ -17,7 +17,8 @@ import com.recruit.agent.search.dto.FilterMergeMode;
 import org.springframework.stereotype.Service;
 
 /**
- * 默认确定性工具执行服务。
+ * 默认的确定性 tool 执行器。
+ * 特点是所有 request 都由代码构造，适合稳定、可审计、可测试的主链路。
  */
 @Service
 public class DeterministicAgentToolExecutionService implements AgentToolExecutionService {
@@ -41,6 +42,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
     public AgentToolExecutionResult execute(AgentRouteDecision routeDecision, ChatSessionState state, String userInput) {
         AgentToolExecutionResult result = new AgentToolExecutionResult();
 
+        // compare/interview 都优先消费当前 selectedCandidateIds；没有时再退回 lastCandidateIds。
         if (routeDecision.getScene() == ChatScene.COMPARE) {
             CandidateComparisonRequest comparisonRequest = new CandidateComparisonRequest();
             comparisonRequest.setCandidateIds(resolveSelectedOrLastCandidateIds(state));
@@ -57,6 +59,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
             return result;
         }
 
+        // refinement 是“基于上一轮 request 再追加条件”，不是一轮独立新搜索。
         if (routeDecision.getScene() == ChatScene.FILTER_REFINE) {
             CandidateSearchRefineRequest refineRequest = new CandidateSearchRefineRequest();
             refineRequest.setBaseRequest(buildBaseRequest(state));
@@ -67,6 +70,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
             return result;
         }
 
+        // 默认 search 会把当前输入当成 query，并沿用 state 中已有 filter。
         CandidateSearchRequest searchRequest = new CandidateSearchRequest();
         searchRequest.setQuery(userInput);
         searchRequest.setFilter(state.getFilter());
@@ -86,6 +90,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
     }
 
     private CandidateSearchRequest buildBaseRequest(ChatSessionState state) {
+        // 把当前 state 还原成一份可继续 refinement 的基础搜索请求。
         CandidateSearchRequest request = new CandidateSearchRequest();
         request.setQuery(state.getCurrentQuery());
         request.setFilter(state.getFilter());

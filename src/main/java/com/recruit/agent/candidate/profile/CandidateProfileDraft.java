@@ -2,6 +2,9 @@ package com.recruit.agent.candidate.profile;
 
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +12,8 @@ import java.util.Map;
 /**
  * 候选人画像草稿对象。
  */
+@Setter
+@Getter
 public class CandidateProfileDraft {
 
     /**
@@ -71,99 +76,4 @@ public class CandidateProfileDraft {
      */
     private Map<String, Object> metadata;
 
-    public DegreeLevel getHighestDegree() {
-        return highestDegree;
-    }
-
-    public void setHighestDegree(DegreeLevel highestDegree) {
-        this.highestDegree = highestDegree;
-    }
-
-    public String getSchoolName() {
-        return schoolName;
-    }
-
-    public void setSchoolName(String schoolName) {
-        this.schoolName = schoolName;
-    }
-
-    public SchoolTier getSchoolTier() {
-        return schoolTier;
-    }
-
-    public void setSchoolTier(SchoolTier schoolTier) {
-        this.schoolTier = schoolTier;
-    }
-
-    public BigDecimal getTotalYearsOfExperience() {
-        return totalYearsOfExperience;
-    }
-
-    public void setTotalYearsOfExperience(BigDecimal totalYearsOfExperience) {
-        this.totalYearsOfExperience = totalYearsOfExperience;
-    }
-
-    public List<String> getTechnicalSkills() {
-        return technicalSkills;
-    }
-
-    public void setTechnicalSkills(List<String> technicalSkills) {
-        this.technicalSkills = technicalSkills;
-    }
-
-    public List<String> getIndustryTags() {
-        return industryTags;
-    }
-
-    public void setIndustryTags(List<String> industryTags) {
-        this.industryTags = industryTags;
-    }
-
-    public List<String> getCompanyTags() {
-        return companyTags;
-    }
-
-    public void setCompanyTags(List<String> companyTags) {
-        this.companyTags = companyTags;
-    }
-
-    public List<String> getProjectTags() {
-        return projectTags;
-    }
-
-    public void setProjectTags(List<String> projectTags) {
-        this.projectTags = projectTags;
-    }
-
-    public Boolean getBigTech() {
-        return bigTech;
-    }
-
-    public void setBigTech(Boolean bigTech) {
-        this.bigTech = bigTech;
-    }
-
-    public Boolean getOutsourcing() {
-        return outsourcing;
-    }
-
-    public void setOutsourcing(Boolean outsourcing) {
-        this.outsourcing = outsourcing;
-    }
-
-    public String getProfileSummary() {
-        return profileSummary;
-    }
-
-    public void setProfileSummary(String profileSummary) {
-        this.profileSummary = profileSummary;
-    }
-
-    public Map<String, Object> getMetadata() {
-        return metadata;
-    }
-
-    public void setMetadata(Map<String, Object> metadata) {
-        this.metadata = metadata;
-    }
 }

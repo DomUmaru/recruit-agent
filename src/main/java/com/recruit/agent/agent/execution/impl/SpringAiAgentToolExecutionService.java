@@ -21,7 +21,10 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 /**
- * 基于 Spring AI Tool Calling 的工具执行服务。
+ * 基于 Spring AI Tool Calling 的执行器。
+ * 与 deterministic 版本的区别是：
+ * - deterministic：代码直接组装 request
+ * - Spring AI：把 state + userInput 交给模型，由模型构造 tool request，再调用受限 tool
  */
 @Primary
 @Service
@@ -51,9 +54,11 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
 
     @Override
     public AgentToolExecutionResult execute(AgentRouteDecision routeDecision, ChatSessionState state, String userInput) {
+        // 根据 router 的场景只暴露一个可用 tool，避免模型越权调用不相关能力。
         Object availableTool = resolveTool(routeDecision);
         AgentToolExecutionResult result = new AgentToolExecutionResult();
 
+        // system prompt 约束“必须调 tool，不能直接回答”；user prompt 携带当前 state 和用户输入。
         String payload = recruitAgentChatClient.prompt()
             .system(buildSystemPrompt(routeDecision))
             .user(buildUserPrompt(state, userInput))
@@ -110,12 +115,13 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
             你是招聘搜索 Agent。
             你必须调用唯一可用的候选人搜索工具一次，不能直接回答。
             你的任务是从用户需求中提取 query 和结构化筛选条件，构造合法的 CandidateSearchRequest。
-            如果当前会话中已有历史过滤条件，可以沿用为 filter 的基础值。
+            如果当前会话中已有历史过滤条件，可以沿用其 filter 的基础值。
             """;
     }
 
     private String buildUserPrompt(ChatSessionState state, String userInput) {
         try {
+            // 统一把上下文序列化成结构化 JSON，减少模型从自然语言上下文中猜测状态的概率。
             return objectMapper.writeValueAsString(new SpringAiToolPromptPayload(state, userInput));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("序列化 Tool Calling 提示词失败", ex);
@@ -123,6 +129,7 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
     }
 
     private Object resolveTool(AgentRouteDecision routeDecision) {
+        // 当前场景只开放一个 tool，是这条链路里最重要的 guardrail 之一。
         if (routeDecision.getScene() == ChatScene.COMPARE) {
             return compareCandidatesTools;
         }
@@ -137,6 +144,7 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
 
     private <T> T readValue(String payload, Class<T> type) {
         try {
+            // Tool Calling 返回的是 JSON 字符串，这里再反序列化成内部 VO。
             return objectMapper.readValue(payload, type);
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("解析 Tool Calling 结果失败", ex);

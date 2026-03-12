@@ -3,10 +3,10 @@ package com.recruit.agent.chat.service.impl;
 import com.recruit.agent.agent.orchestrator.AgentOrchestratorService;
 import com.recruit.agent.agent.orchestrator.dto.AgentExecuteRequest;
 import com.recruit.agent.agent.orchestrator.dto.AgentExecuteResponse;
+import com.recruit.agent.chat.dto.ChatCitationPayload;
 import com.recruit.agent.chat.dto.ChatComparisonCandidatePayload;
 import com.recruit.agent.chat.dto.ChatComparisonEvidencePayload;
 import com.recruit.agent.chat.dto.ChatComparisonPayload;
-import com.recruit.agent.chat.dto.ChatCitationPayload;
 import com.recruit.agent.chat.dto.ChatRequest;
 import com.recruit.agent.chat.dto.ChatResponse;
 import com.recruit.agent.chat.dto.ChatRouterDecisionPayload;
@@ -15,13 +15,12 @@ import com.recruit.agent.chat.dto.ChatStateUpdatePayload;
 import com.recruit.agent.chat.dto.ChatStreamEvent;
 import com.recruit.agent.chat.dto.ChatTokenPayload;
 import com.recruit.agent.chat.dto.ChatToolCallPayload;
-import com.recruit.agent.chat.service.ChatApplicationService;
 import com.recruit.agent.chat.model.ChatScene;
+import com.recruit.agent.chat.service.ChatApplicationService;
 import com.recruit.agent.comparison.vo.CandidateComparisonEvidenceVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonItemVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
 import com.recruit.agent.interview.vo.CandidateInterviewQuestionVO;
-import com.recruit.agent.interview.vo.InterviewQuestionResponse;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
 import java.util.ArrayList;
@@ -29,7 +28,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * 聊天应用服务实现。
+ * Chat 应用层。
+ * 负责把前端 chat 协议转换成内部 agent 执行协议，再把结果包装回 chat 响应或 SSE 事件。
  */
 @Service
 public class ChatApplicationServiceImpl implements ChatApplicationService {
@@ -42,15 +42,18 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
 
     @Override
     public ChatResponse chat(ChatRequest request) {
+        // 普通 chat 只做一次 orchestrator 调用，然后直接返回聚合后的响应对象。
         AgentExecuteResponse executeResponse = agentOrchestratorService.execute(toExecuteRequest(request));
         return toChatResponse(executeResponse);
     }
 
     @Override
     public List<ChatStreamEvent> stream(ChatRequest request) {
+        // stream 不重复执行业务，只把同一份执行结果拆成前端更容易消费的事件流。
         AgentExecuteResponse executeResponse = agentOrchestratorService.execute(toExecuteRequest(request));
 
         List<ChatStreamEvent> events = new ArrayList<>();
+        // 这些事件基本对应一轮 agent 执行的关键阶段。
         events.add(event("start", toSessionPayload(executeResponse)));
         events.add(event("router_decision", toRouterDecisionPayload(executeResponse)));
         events.add(event("tool_call", toToolCallPayload(executeResponse)));
@@ -72,6 +75,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     }
 
     private AgentExecuteRequest toExecuteRequest(ChatRequest request) {
+        // ChatRequest 更贴近前端语义，这里统一转换成内部编排层使用的 AgentExecuteRequest。
         AgentExecuteRequest executeRequest = new AgentExecuteRequest();
         executeRequest.setSessionNo(request.getSessionNo());
         executeRequest.setUserId(request.getUserId());
@@ -80,6 +84,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     }
 
     private ChatResponse toChatResponse(AgentExecuteResponse executeResponse) {
+        // 这里是纯协议映射，不额外修改业务结果。
         ChatResponse response = new ChatResponse();
         response.setSessionNo(executeResponse.getSessionNo());
         response.setScene(executeResponse.getRouteDecision().getScene());
@@ -122,6 +127,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     }
 
     private ChatStateUpdatePayload toStateUpdatePayload(AgentExecuteResponse executeResponse) {
+        // state_update 用来让前端知道这一轮结束后，会话状态被推进到了哪里。
         ChatStateUpdatePayload payload = new ChatStateUpdatePayload();
         payload.setScene(executeResponse.getRouteDecision().getScene());
         if (executeResponse.getRouteDecision().getScene() == ChatScene.INTERVIEW) {
@@ -157,6 +163,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     }
 
     private Object resolveToolResult(AgentExecuteResponse executeResponse) {
+        // 不同场景下 tool_result 的结构不同，这里做统一分发。
         if (executeResponse.getRouteDecision().getScene() == ChatScene.INTERVIEW) {
             return executeResponse.getInterviewResponse();
         }
@@ -167,6 +174,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     }
 
     private List<ChatStreamEvent> toCitationEvents(AgentExecuteResponse executeResponse) {
+        // citation 事件只在搜索类场景输出，用来解释候选人为什么被召回。
         if (executeResponse.getSearchResponse() == null || executeResponse.getSearchResponse().getCandidates() == null) {
             return List.of();
         }
@@ -245,6 +253,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     }
 
     private List<ChatStreamEvent> toTokenEvents(String summary) {
+        // 当前并非真实 token streaming，而是把 summary 切片后模拟成逐段输出。
         String normalized = summary == null ? "" : summary.trim();
         if (normalized.isBlank()) {
             return List.of();
@@ -262,6 +271,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     }
 
     private List<String> splitSummary(String summary) {
+        // 固定长度切片，方便前端展示流式效果。
         List<String> parts = new ArrayList<>();
         int chunkSize = 12;
         for (int start = 0; start < summary.length(); start += chunkSize) {

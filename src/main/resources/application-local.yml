@@ -27,5 +27,11 @@ logging:
     org.hibernate.SQL: debug
 
 app:
+  ocr:
+    provider: paddle
+    base-url: http://localhost:9001
+    recognize-path: /api/ocr/recognize
+    connect-timeout-ms: 10000
+    read-timeout-ms: 180000
   resume:
     upload-dir: data/uploads/resumes
