@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.recruit.agent.candidate.model.DegreeLevel;
@@ -14,6 +15,7 @@ import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.normalization.impl.SearchRequestNormalizationServiceImpl;
 import com.recruit.agent.search.parser.impl.RuleBasedNaturalLanguageSearchFilterParser;
+import com.recruit.agent.search.reason.impl.DefaultCandidateMatchReasonService;
 import com.recruit.agent.search.service.impl.CandidateSearchServiceImpl;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
 import java.math.BigDecimal;
@@ -32,7 +34,8 @@ class CandidateSearchServiceImplTest {
         ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
         CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
             elasticsearchOperations,
-            new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser())
+            new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
+            new DefaultCandidateMatchReasonService()
         );
 
         CandidateProfileIndex matched = new CandidateProfileIndex();
@@ -48,20 +51,7 @@ class CandidateSearchServiceImplTest {
         matched.setProjectTags(List.of("推荐系统"));
         matched.setBigTech(true);
         matched.setOutsourcing(false);
-        matched.setProfileSummary("具备推荐系统和搜索相关经验，熟悉 Java 与 Elasticsearch。");
-
-        CandidateProfileIndex filteredOut = new CandidateProfileIndex();
-        filteredOut.setId("idx-2");
-        filteredOut.setCandidateId("candidate-2");
-        filteredOut.setCandidateNo("C-002");
-        filteredOut.setFullName("李四");
-        filteredOut.setHighestDegree(DegreeLevel.ASSOCIATE.name());
-        filteredOut.setSchoolTier(SchoolTier.OTHER.name());
-        filteredOut.setTotalYearsOfExperience(new BigDecimal("2.0"));
-        filteredOut.setTechnicalSkills(List.of("PHP"));
-        filteredOut.setBigTech(false);
-        filteredOut.setOutsourcing(true);
-        filteredOut.setProfileSummary("主要从事 PHP 项目开发。");
+        matched.setProfileSummary("具备推荐系统和搜索相关经验，熟悉 Java、Elasticsearch。");
 
         ResumeChunk evidence = new ResumeChunk();
         evidence.setId("chunk-1");
@@ -109,5 +99,49 @@ class CandidateSearchServiceImplTest {
         assertEquals("上海", response.getCandidates().get(0).getCurrentCity());
         assertFalse(response.getCandidates().get(0).getEvidenceList().isEmpty());
         assertFalse(response.getCandidates().get(0).getMatchReasons().isEmpty());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldSupportFilterOnlySearchWhenQueryIsFullyStripped() {
+        ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
+        CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
+            elasticsearchOperations,
+            new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
+            new DefaultCandidateMatchReasonService()
+        );
+
+        CandidateProfileIndex matched = new CandidateProfileIndex();
+        matched.setCandidateId("candidate-1");
+        matched.setCandidateNo("C-001");
+        matched.setFullName("张三");
+        matched.setCurrentCity("上海");
+        matched.setSchoolTier(SchoolTier.PROJECT_985.name());
+        matched.setTotalYearsOfExperience(new BigDecimal("5.0"));
+        matched.setOutsourcing(false);
+
+        SearchHit<CandidateProfileIndex> candidateHit = org.mockito.Mockito.mock(SearchHit.class);
+        when(candidateHit.getContent()).thenReturn(matched);
+        when(candidateHit.getScore()).thenReturn(6.5f);
+
+        SearchHits<CandidateProfileIndex> candidateHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(candidateHits.getSearchHits()).thenReturn(List.of(candidateHit));
+        when(candidateHits.getTotalHits()).thenReturn(1L);
+
+        SearchHits<ResumeChunk> resumeChunkHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(resumeChunkHits.getSearchHits()).thenReturn(List.of());
+
+        when(elasticsearchOperations.search(any(Query.class), eq(CandidateProfileIndex.class))).thenReturn(candidateHits);
+        when(elasticsearchOperations.search(any(Query.class), eq(ResumeChunk.class))).thenReturn(resumeChunkHits);
+
+        CandidateSearchRequest request = new CandidateSearchRequest();
+        request.setQuery("985 5年 上海 不要外包");
+
+        CandidateSearchResponse response = service.search(request);
+
+        assertEquals("", response.getQuery());
+        assertEquals(1, response.getTotal());
+        assertEquals("candidate-1", response.getCandidates().get(0).getCandidateId());
+        verify(elasticsearchOperations).search(any(Query.class), eq(CandidateProfileIndex.class));
     }
 }

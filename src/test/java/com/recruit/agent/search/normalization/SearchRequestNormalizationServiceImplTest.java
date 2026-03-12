@@ -68,4 +68,27 @@ class SearchRequestNormalizationServiceImplTest {
         assertEquals(Boolean.FALSE, prepared.getFilter().getOutsourcing());
         assertIterableEquals(List.of("Java"), prepared.getFilter().getTechnicalSkills());
     }
+
+    @Test
+    void shouldNormalizeLimitsAndAllowFilterOnlyQuery() {
+        SearchRequestNormalizationServiceImpl service = new SearchRequestNormalizationServiceImpl(
+            new RuleBasedNaturalLanguageSearchFilterParser()
+        );
+
+        CandidateSearchRequest request = new CandidateSearchRequest();
+        request.setQuery("985 5年 上海 不要外包");
+        request.setLimit(0);
+        request.setEvidenceLimit(-1);
+
+        PreparedCandidateSearchRequest prepared = service.prepare(request);
+
+        assertEquals("", prepared.getQuery());
+        assertIterableEquals(List.of(DegreeLevel.BACHELOR), prepared.getFilter().getHighestDegrees());
+        assertIterableEquals(List.of(SchoolTier.PROJECT_985), prepared.getFilter().getSchoolTiers());
+        assertEquals(new BigDecimal("5"), prepared.getFilter().getMinYearsOfExperience());
+        assertEquals("上海", prepared.getFilter().getCurrentCity());
+        assertEquals(Boolean.FALSE, prepared.getFilter().getOutsourcing());
+        assertEquals(10, prepared.getLimit());
+        assertEquals(3, prepared.getEvidenceLimit());
+    }
 }

@@ -9,6 +9,7 @@ import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.normalization.PreparedCandidateSearchRequest;
 import com.recruit.agent.search.normalization.SearchRequestNormalizationService;
+import com.recruit.agent.search.reason.CandidateMatchReasonService;
 import com.recruit.agent.search.service.CandidateSearchService;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
@@ -26,19 +27,19 @@ import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 
-/**
- * 候选人搜索服务实现。
- */
 @Service
 public class CandidateSearchServiceImpl implements CandidateSearchService {
 
     private final ElasticsearchOperations elasticsearchOperations;
     private final SearchRequestNormalizationService searchRequestNormalizationService;
+    private final CandidateMatchReasonService candidateMatchReasonService;
 
     public CandidateSearchServiceImpl(ElasticsearchOperations elasticsearchOperations,
-                                      SearchRequestNormalizationService searchRequestNormalizationService) {
+                                      SearchRequestNormalizationService searchRequestNormalizationService,
+                                      CandidateMatchReasonService candidateMatchReasonService) {
         this.elasticsearchOperations = elasticsearchOperations;
         this.searchRequestNormalizationService = searchRequestNormalizationService;
+        this.candidateMatchReasonService = candidateMatchReasonService;
     }
 
     @Override
@@ -86,6 +87,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                                          List<String> scopeCandidateIds,
                                          List<String> queryTerms) {
         List<Query> filters = new ArrayList<>();
+
         if (scopeCandidateIds != null && !scopeCandidateIds.isEmpty()) {
             filters.add(Query.of(q -> q.terms(t -> t
                 .field("candidateId")
@@ -94,6 +96,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                     .map(FieldValue::of)
                     .toList())))));
         }
+
         if (filter.getHighestDegrees() != null && !filter.getHighestDegrees().isEmpty()) {
             filters.add(Query.of(q -> q.terms(t -> t
                 .field("highestDegree")
@@ -188,43 +191,9 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         item.setOutsourcing(profile.getOutsourcing());
         item.setProfileSummary(profile.getProfileSummary());
         item.setMatchScore(hit.getScore());
-        item.setMatchReasons(buildMatchReasons(profile, query, queryTerms, filter));
+        item.setMatchReasons(candidateMatchReasonService.buildMatchReasons(profile, query, queryTerms, filter));
         item.setEvidenceList(loadEvidence(profile.getCandidateId(), query, queryTerms, evidenceLimit));
         return item;
-    }
-
-    private List<String> buildMatchReasons(CandidateProfileIndex profile,
-                                           String query,
-                                           List<String> queryTerms,
-                                           CandidateSearchFilter filter) {
-        List<String> reasons = new ArrayList<>();
-
-        if (!query.isBlank() && containsAny(normalize(query), profile.getTechnicalSkills())) {
-            reasons.add("技术栈命中查询关键词");
-        }
-        if (!query.isBlank() && containsAny(normalize(query), profile.getProjectTags())) {
-            reasons.add("项目标签命中查询关键词");
-        }
-        if (!query.isBlank() && normalize(profile.getProfileSummary()).contains(normalize(query))) {
-            reasons.add("候选人摘要与查询语义匹配");
-        }
-        if (filter.getMinYearsOfExperience() != null && profile.getTotalYearsOfExperience() != null) {
-            reasons.add("工作年限满足筛选条件");
-        }
-        if (Boolean.TRUE.equals(filter.getBigTech()) && Boolean.TRUE.equals(profile.getBigTech())) {
-            reasons.add("具备大厂背景");
-        }
-        if (filter.getTechnicalSkills() != null && !filter.getTechnicalSkills().isEmpty()) {
-            reasons.add("满足技术栈过滤条件");
-        }
-
-        if (reasons.isEmpty() && !queryTerms.isEmpty()) {
-            reasons.add("基础关键词匹配");
-        }
-        if (reasons.isEmpty()) {
-            reasons.add("满足结构化过滤条件");
-        }
-        return reasons;
     }
 
     private List<CandidateSearchEvidenceVO> loadEvidence(String candidateId,
@@ -293,32 +262,17 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         return evidence;
     }
 
-    private boolean containsAny(String queryTerm, List<String> values) {
-        if (values == null || values.isEmpty()) {
-            return false;
-        }
-        return values.stream()
-            .filter(Objects::nonNull)
-            .map(this::normalize)
-            .anyMatch(value -> value.contains(queryTerm));
-    }
-
     private List<String> tokenize(String query) {
         String normalized = safeText(query).trim();
         if (normalized.isBlank()) {
             return List.of();
         }
-        return Arrays.stream(normalized.toLowerCase(Locale.ROOT).split("[\\s,，;；]+"))
+        return Arrays.stream(normalized.toLowerCase(Locale.ROOT).split("[\\s,，、]+"))
             .filter(token -> !token.isBlank())
             .toList();
-    }
-
-    private String normalize(String text) {
-        return safeText(text).toLowerCase(Locale.ROOT);
     }
 
     private String safeText(String text) {
         return text == null ? "" : text;
     }
-
 }

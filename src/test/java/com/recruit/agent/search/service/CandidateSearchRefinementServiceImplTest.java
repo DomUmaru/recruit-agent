@@ -99,4 +99,35 @@ class CandidateSearchRefinementServiceImplTest {
                 && List.of("candidate-3").equals(request.getScopeCandidateIds())
         ));
     }
+
+    @Test
+    void shouldAccumulateResidualQueryAcrossMultipleAppends() {
+        CandidateSearchService candidateSearchService = org.mockito.Mockito.mock(CandidateSearchService.class);
+        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(
+            candidateSearchService,
+            new RuleBasedNaturalLanguageSearchFilterParser()
+        );
+
+        CandidateSearchRequest baseRequest = new CandidateSearchRequest();
+        baseRequest.setQuery("推荐系统");
+
+        CandidateSearchRefineRequest firstRefine = new CandidateSearchRefineRequest();
+        firstRefine.setBaseRequest(baseRequest);
+        firstRefine.setRefinementQuery("Java 985");
+        firstRefine.setMergeMode(FilterMergeMode.APPEND);
+
+        CandidateSearchRequest firstMerged = service.merge(firstRefine);
+
+        CandidateSearchRefineRequest secondRefine = new CandidateSearchRefineRequest();
+        secondRefine.setBaseRequest(firstMerged);
+        secondRefine.setRefinementQuery("Elasticsearch 上海");
+        secondRefine.setMergeMode(FilterMergeMode.APPEND);
+
+        CandidateSearchRequest secondMerged = service.merge(secondRefine);
+
+        assertEquals("推荐系统 java elasticsearch", secondMerged.getQuery());
+        assertIterableEquals(List.of(SchoolTier.PROJECT_985), secondMerged.getFilter().getSchoolTiers());
+        assertIterableEquals(List.of("Java", "Elasticsearch"), secondMerged.getFilter().getTechnicalSkills());
+        assertEquals("上海", secondMerged.getFilter().getCurrentCity());
+    }
 }
