@@ -5,6 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.recruit.agent.interview.dto.InterviewQuestionRequest;
+import com.recruit.agent.interview.service.InterviewQuestionService;
+import com.recruit.agent.interview.vo.InterviewQuestionResponse;
 import com.recruit.agent.search.dto.CandidateSearchRefineRequest;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.service.CandidateSearchRefinementService;
@@ -38,5 +41,18 @@ class SpringAiToolsDelegationTest {
 
         assertSame(expected, actual);
         verify(refinementService).refineSearch(any(CandidateSearchRefineRequest.class));
+    }
+
+    @Test
+    void shouldDelegateInterviewToolAnnotationBean() {
+        InterviewQuestionService interviewQuestionService = org.mockito.Mockito.mock(InterviewQuestionService.class);
+        InterviewQuestionTools tools = new InterviewQuestionTools(interviewQuestionService);
+        InterviewQuestionResponse expected = new InterviewQuestionResponse();
+        when(interviewQuestionService.generate(any(InterviewQuestionRequest.class))).thenReturn(expected);
+
+        InterviewQuestionResponse actual = tools.generateInterviewQuestionsTool(new InterviewQuestionRequest());
+
+        assertSame(expected, actual);
+        verify(interviewQuestionService).generate(any(InterviewQuestionRequest.class));
     }
 }

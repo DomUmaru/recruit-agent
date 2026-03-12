@@ -4,11 +4,13 @@ import com.recruit.agent.agent.execution.AgentToolExecutionResult;
 import com.recruit.agent.agent.execution.AgentToolExecutionService;
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
 import com.recruit.agent.agent.tool.CompareCandidatesToolService;
+import com.recruit.agent.agent.tool.GenerateInterviewQuestionsToolService;
 import com.recruit.agent.agent.tool.RefineSearchFilterToolService;
 import com.recruit.agent.agent.tool.SearchCandidateToolService;
 import com.recruit.agent.chat.model.ChatScene;
 import com.recruit.agent.chat.state.ChatSessionState;
 import com.recruit.agent.comparison.dto.CandidateComparisonRequest;
+import com.recruit.agent.interview.dto.InterviewQuestionRequest;
 import com.recruit.agent.search.dto.CandidateSearchRefineRequest;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.dto.FilterMergeMode;
@@ -21,13 +23,16 @@ import org.springframework.stereotype.Service;
 public class DeterministicAgentToolExecutionService implements AgentToolExecutionService {
 
     private final CompareCandidatesToolService compareCandidatesToolService;
+    private final GenerateInterviewQuestionsToolService generateInterviewQuestionsToolService;
     private final SearchCandidateToolService searchCandidateToolService;
     private final RefineSearchFilterToolService refineSearchFilterToolService;
 
     public DeterministicAgentToolExecutionService(CompareCandidatesToolService compareCandidatesToolService,
+                                                  GenerateInterviewQuestionsToolService generateInterviewQuestionsToolService,
                                                   SearchCandidateToolService searchCandidateToolService,
                                                   RefineSearchFilterToolService refineSearchFilterToolService) {
         this.compareCandidatesToolService = compareCandidatesToolService;
+        this.generateInterviewQuestionsToolService = generateInterviewQuestionsToolService;
         this.searchCandidateToolService = searchCandidateToolService;
         this.refineSearchFilterToolService = refineSearchFilterToolService;
     }
@@ -41,6 +46,14 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
             comparisonRequest.setCandidateIds(state.getLastCandidateIds());
             comparisonRequest.setTargetQuery(state.getCurrentQuery());
             result.setComparisonResponse(compareCandidatesToolService.execute(comparisonRequest));
+            return result;
+        }
+
+        if (routeDecision.getScene() == ChatScene.INTERVIEW) {
+            InterviewQuestionRequest interviewRequest = new InterviewQuestionRequest();
+            interviewRequest.setCandidateIds(resolveInterviewCandidateIds(state));
+            interviewRequest.setTargetQuery(state.getCurrentQuery());
+            result.setInterviewResponse(generateInterviewQuestionsToolService.execute(interviewRequest));
             return result;
         }
 
@@ -59,6 +72,13 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
         searchRequest.setFilter(state.getFilter());
         result.setSearchResponse(searchCandidateToolService.execute(searchRequest));
         return result;
+    }
+
+    private java.util.List<String> resolveInterviewCandidateIds(ChatSessionState state) {
+        if (state.getSelectedCandidateIds() != null && !state.getSelectedCandidateIds().isEmpty()) {
+            return state.getSelectedCandidateIds();
+        }
+        return state.getLastCandidateIds();
     }
 
     private CandidateSearchRequest buildBaseRequest(ChatSessionState state) {

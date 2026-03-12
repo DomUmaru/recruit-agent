@@ -20,6 +20,8 @@ import com.recruit.agent.chat.model.ChatScene;
 import com.recruit.agent.comparison.vo.CandidateComparisonEvidenceVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonItemVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
+import com.recruit.agent.interview.vo.CandidateInterviewQuestionVO;
+import com.recruit.agent.interview.vo.InterviewQuestionResponse;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
 import java.util.ArrayList;
@@ -56,8 +58,12 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
         if (executeResponse.getRouteDecision().getScene() == ChatScene.COMPARE) {
             events.add(event("comparison", toComparisonPayload(executeResponse.getComparisonResponse())));
         }
+        if (executeResponse.getRouteDecision().getScene() == ChatScene.INTERVIEW) {
+            events.add(event("interview", executeResponse.getInterviewResponse()));
+        }
         events.add(event("state_update", toStateUpdatePayload(executeResponse)));
-        if (executeResponse.getRouteDecision().getScene() != ChatScene.COMPARE) {
+        if (executeResponse.getRouteDecision().getScene() == ChatScene.SEARCH
+            || executeResponse.getRouteDecision().getScene() == ChatScene.FILTER_REFINE) {
             events.addAll(toCitationEvents(executeResponse));
         }
         events.addAll(toTokenEvents(executeResponse.getSummary()));
@@ -82,6 +88,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
         response.setSearchResponse(executeResponse.getSearchResponse());
         response.setComparisonResponse(executeResponse.getComparisonResponse());
         response.setComparison(toComparisonPayload(executeResponse.getComparisonResponse()));
+        response.setInterviewResponse(executeResponse.getInterviewResponse());
         return response;
     }
 
@@ -117,6 +124,16 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     private ChatStateUpdatePayload toStateUpdatePayload(AgentExecuteResponse executeResponse) {
         ChatStateUpdatePayload payload = new ChatStateUpdatePayload();
         payload.setScene(executeResponse.getRouteDecision().getScene());
+        if (executeResponse.getRouteDecision().getScene() == ChatScene.INTERVIEW) {
+            payload.setCurrentQuery(executeResponse.getInterviewResponse() == null ? null : executeResponse.getInterviewResponse().getTargetQuery());
+            payload.setLastCandidateIds(executeResponse.getInterviewResponse() == null || executeResponse.getInterviewResponse().getCandidates() == null
+                ? List.of()
+                : executeResponse.getInterviewResponse().getCandidates().stream()
+                    .map(CandidateInterviewQuestionVO::getCandidateId)
+                    .toList());
+            return payload;
+        }
+
         if (executeResponse.getRouteDecision().getScene() == ChatScene.COMPARE) {
             payload.setCurrentQuery(executeResponse.getComparisonResponse() == null ? null : executeResponse.getComparisonResponse().getTargetQuery());
             payload.setLastCandidateIds(executeResponse.getComparisonResponse() == null || executeResponse.getComparisonResponse().getCandidates() == null
@@ -137,6 +154,9 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     }
 
     private Object resolveToolResult(AgentExecuteResponse executeResponse) {
+        if (executeResponse.getRouteDecision().getScene() == ChatScene.INTERVIEW) {
+            return executeResponse.getInterviewResponse();
+        }
         if (executeResponse.getRouteDecision().getScene() == ChatScene.COMPARE) {
             return executeResponse.getComparisonResponse();
         }

@@ -17,6 +17,7 @@ public class AgentRouterServiceImpl implements AgentRouterService {
     private static final String SEARCH_TOOL_NAME = "searchCandidateByJDTool";
     private static final String REFINE_TOOL_NAME = "refineSearchFilterTool";
     private static final String COMPARE_TOOL_NAME = "compareCandidatesTool";
+    private static final String INTERVIEW_TOOL_NAME = "generateInterviewQuestionsTool";
 
     private static final List<String> REFINE_KEYWORDS = List.of(
         "只要", "再加", "追加", "筛选", "过滤", "排除", "限定", "仅看", "优先", "不要", "只看", "保留"
@@ -26,6 +27,10 @@ public class AgentRouterServiceImpl implements AgentRouterService {
         "对比", "比较", "比一下", "比一比", "横向看", "pk"
     );
 
+    private static final List<String> INTERVIEW_KEYWORDS = List.of(
+        "面试", "面试题", "题目", "提问", "追问", "八股", "interview"
+    );
+
     @Override
     public AgentRouteDecision route(AgentRoutingContext context) {
         AgentRoutingContext safeContext = context == null ? new AgentRoutingContext() : context;
@@ -33,8 +38,17 @@ public class AgentRouterServiceImpl implements AgentRouterService {
         boolean hasHistory = hasHistory(safeContext);
         boolean refineIntent = hasHistory && isRefineIntent(userInput);
         boolean compareIntent = hasHistory && isCompareIntent(userInput);
+        boolean interviewIntent = hasHistory && isInterviewIntent(userInput);
 
         AgentRouteDecision decision = new AgentRouteDecision();
+        if (interviewIntent) {
+            decision.setScene(ChatScene.INTERVIEW);
+            decision.setToolName(INTERVIEW_TOOL_NAME);
+            decision.setHistoryRequired(true);
+            decision.setReason("检测到面试题生成语义，且会话中存在可复用候选人范围");
+            return decision;
+        }
+
         if (compareIntent) {
             decision.setScene(ChatScene.COMPARE);
             decision.setToolName(COMPARE_TOOL_NAME);
@@ -47,7 +61,7 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             decision.setScene(ChatScene.FILTER_REFINE);
             decision.setToolName(REFINE_TOOL_NAME);
             decision.setHistoryRequired(true);
-            decision.setReason("检测到追加/覆盖筛选语义，且会话中存在可复用的搜索历史");
+            decision.setReason("检测到追加或覆盖筛选语义，且会话中存在可复用搜索历史");
             return decision;
         }
 
@@ -79,6 +93,13 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             return false;
         }
         return COMPARE_KEYWORDS.stream().anyMatch(userInput::contains);
+    }
+
+    private boolean isInterviewIntent(String userInput) {
+        if (userInput.isBlank()) {
+            return false;
+        }
+        return INTERVIEW_KEYWORDS.stream().anyMatch(userInput::contains);
     }
 
     private String normalize(String text) {

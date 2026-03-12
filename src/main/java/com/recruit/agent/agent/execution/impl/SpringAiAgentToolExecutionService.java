@@ -6,11 +6,13 @@ import com.recruit.agent.agent.execution.AgentToolExecutionResult;
 import com.recruit.agent.agent.execution.AgentToolExecutionService;
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
 import com.recruit.agent.agent.tool.springai.CompareCandidatesTools;
+import com.recruit.agent.agent.tool.springai.InterviewQuestionTools;
 import com.recruit.agent.agent.tool.springai.RefineSearchTools;
 import com.recruit.agent.agent.tool.springai.SearchCandidateTools;
 import com.recruit.agent.chat.model.ChatScene;
 import com.recruit.agent.chat.state.ChatSessionState;
 import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
+import com.recruit.agent.interview.vo.InterviewQuestionResponse;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -28,17 +30,20 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
 
     private final ChatClient recruitAgentChatClient;
     private final CompareCandidatesTools compareCandidatesTools;
+    private final InterviewQuestionTools interviewQuestionTools;
     private final SearchCandidateTools searchCandidateTools;
     private final RefineSearchTools refineSearchTools;
     private final ObjectMapper objectMapper;
 
     public SpringAiAgentToolExecutionService(@Qualifier("recruitAgentChatClient") ChatClient recruitAgentChatClient,
                                              CompareCandidatesTools compareCandidatesTools,
+                                             InterviewQuestionTools interviewQuestionTools,
                                              SearchCandidateTools searchCandidateTools,
                                              RefineSearchTools refineSearchTools,
                                              ObjectMapper objectMapper) {
         this.recruitAgentChatClient = recruitAgentChatClient;
         this.compareCandidatesTools = compareCandidatesTools;
+        this.interviewQuestionTools = interviewQuestionTools;
         this.searchCandidateTools = searchCandidateTools;
         this.refineSearchTools = refineSearchTools;
         this.objectMapper = objectMapper;
@@ -61,6 +66,11 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
             return result;
         }
 
+        if (routeDecision.getScene() == ChatScene.INTERVIEW) {
+            result.setInterviewResponse(readValue(payload, InterviewQuestionResponse.class));
+            return result;
+        }
+
         result.setSearchResponse(readValue(payload, CandidateSearchResponse.class));
         return result;
     }
@@ -70,8 +80,18 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
             return """
                 你是招聘对比 Agent。
                 你必须调用唯一可用的候选人对比工具一次，不能直接回答。
-                你的任务是基于当前会话中的候选人范围构造 CandidateComparisonRequest。
-                candidateIds 使用会话中上一轮候选人 ID 列表。
+                你的任务是基于当前会话中的候选人范围构造合法的 CandidateComparisonRequest。
+                candidateIds 使用会话中的 lastCandidateIds。
+                targetQuery 使用当前会话 query。
+                """;
+        }
+
+        if (routeDecision.getScene() == ChatScene.INTERVIEW) {
+            return """
+                你是招聘面试 Agent。
+                你必须调用唯一可用的面试题生成工具一次，不能直接回答。
+                你的任务是基于当前会话中的候选人范围构造合法的 InterviewQuestionRequest。
+                candidateIds 优先使用会话中的 selectedCandidateIds；如果为空，则使用 lastCandidateIds。
                 targetQuery 使用当前会话 query。
                 """;
         }
@@ -105,6 +125,9 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
     private Object resolveTool(AgentRouteDecision routeDecision) {
         if (routeDecision.getScene() == ChatScene.COMPARE) {
             return compareCandidatesTools;
+        }
+        if (routeDecision.getScene() == ChatScene.INTERVIEW) {
+            return interviewQuestionTools;
         }
         if (routeDecision.getScene() == ChatScene.FILTER_REFINE) {
             return refineSearchTools;

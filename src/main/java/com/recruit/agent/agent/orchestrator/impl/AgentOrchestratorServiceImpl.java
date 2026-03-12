@@ -75,6 +75,7 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
         response.setRouteDecision(routeDecision);
         response.setSearchResponse(executionResult.getSearchResponse());
         response.setComparisonResponse(executionResult.getComparisonResponse());
+        response.setInterviewResponse(executionResult.getInterviewResponse());
         response.setSummary(summary);
         return response;
     }
@@ -111,9 +112,17 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
                              String userInput,
                              AgentToolExecutionResult executionResult) {
         state.setCurrentScene(routeDecision.getScene());
-        state.setCurrentQuery(routeDecision.getScene() == ChatScene.FILTER_REFINE
-            ? mergeQuery(state.getCurrentQuery(), userInput)
-            : userInput);
+        state.setCurrentQuery(resolveCurrentQuery(state.getCurrentQuery(), routeDecision.getScene(), userInput));
+        if (executionResult.getInterviewResponse() != null && executionResult.getInterviewResponse().getCandidates() != null) {
+            state.setSelectedCandidateIds(executionResult.getInterviewResponse().getCandidates().stream()
+                .map(candidate -> candidate.getCandidateId())
+                .toList());
+        }
+        if (executionResult.getComparisonResponse() != null && executionResult.getComparisonResponse().getCandidates() != null) {
+            state.setSelectedCandidateIds(executionResult.getComparisonResponse().getCandidates().stream()
+                .map(candidate -> candidate.getCandidateId())
+                .toList());
+        }
         if (executionResult.getSearchResponse() != null && executionResult.getSearchResponse().getCandidates() != null) {
             state.setLastCandidateIds(executionResult.getSearchResponse().getCandidates().stream()
                 .map(candidate -> candidate.getCandidateId())
@@ -122,6 +131,10 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
     }
 
     private String buildSummary(AgentToolExecutionResult executionResult, AgentRouteDecision routeDecision) {
+        if (routeDecision.getScene() == ChatScene.INTERVIEW && executionResult.getInterviewResponse() != null) {
+            return executionResult.getInterviewResponse().getSummary();
+        }
+
         if (routeDecision.getScene() == ChatScene.COMPARE && executionResult.getComparisonResponse() != null) {
             return executionResult.getComparisonResponse().getSummary();
         }
@@ -172,5 +185,15 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
             return currentQuery;
         }
         return currentQuery + " " + latestInput;
+    }
+
+    private String resolveCurrentQuery(String currentQuery, ChatScene scene, String userInput) {
+        if (scene == ChatScene.FILTER_REFINE) {
+            return mergeQuery(currentQuery, userInput);
+        }
+        if (scene == ChatScene.COMPARE || scene == ChatScene.INTERVIEW) {
+            return currentQuery == null || currentQuery.isBlank() ? userInput : currentQuery;
+        }
+        return userInput;
     }
 }

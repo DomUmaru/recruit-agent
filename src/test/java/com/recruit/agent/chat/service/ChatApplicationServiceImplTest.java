@@ -12,6 +12,9 @@ import com.recruit.agent.agent.router.dto.AgentRouteDecision;
 import com.recruit.agent.comparison.vo.CandidateComparisonEvidenceVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonItemVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
+import com.recruit.agent.interview.vo.CandidateInterviewQuestionVO;
+import com.recruit.agent.interview.vo.InterviewQuestionItemVO;
+import com.recruit.agent.interview.vo.InterviewQuestionResponse;
 import com.recruit.agent.chat.dto.ChatRequest;
 import com.recruit.agent.chat.dto.ChatResponse;
 import com.recruit.agent.chat.dto.ChatStreamEvent;
@@ -127,6 +130,54 @@ class ChatApplicationServiceImplTest {
         assertEquals(ChatScene.COMPARE, response.getScene());
         assertEquals("推荐系统", response.getComparison().getTargetQuery());
         assertEquals("comparison", events.get(4).getEvent());
+        assertEquals("state_update", events.get(5).getEvent());
+        assertFalse(events.stream().anyMatch(event -> "citation".equals(event.getEvent())));
+        assertTrue(events.stream().anyMatch(event -> "token".equals(event.getEvent())));
+    }
+
+    @Test
+    void shouldBuildInterviewEvents() {
+        AgentOrchestratorService orchestratorService = org.mockito.Mockito.mock(AgentOrchestratorService.class);
+        ChatApplicationServiceImpl service = new ChatApplicationServiceImpl(orchestratorService);
+
+        AgentRouteDecision decision = new AgentRouteDecision();
+        decision.setScene(ChatScene.INTERVIEW);
+        decision.setToolName("generateInterviewQuestionsTool");
+
+        InterviewQuestionItemVO question = new InterviewQuestionItemVO();
+        question.setCategory("技术深挖");
+        question.setQuestion("请介绍你做推荐系统召回优化时的关键技术取舍。");
+
+        CandidateInterviewQuestionVO candidate = new CandidateInterviewQuestionVO();
+        candidate.setCandidateId("candidate-1");
+        candidate.setCandidateNo("C-001");
+        candidate.setFullName("张三");
+        candidate.setQuestions(List.of(question));
+
+        InterviewQuestionResponse interviewResponse = new InterviewQuestionResponse();
+        interviewResponse.setTargetQuery("推荐系统");
+        interviewResponse.setCandidates(List.of(candidate));
+        interviewResponse.setSummary("已围绕推荐系统生成候选人面试题。");
+
+        AgentExecuteResponse executeResponse = new AgentExecuteResponse();
+        executeResponse.setSessionNo("session-3");
+        executeResponse.setRouteDecision(decision);
+        executeResponse.setInterviewResponse(interviewResponse);
+        executeResponse.setSummary("已围绕推荐系统生成候选人面试题。");
+
+        when(orchestratorService.execute(any())).thenReturn(executeResponse);
+
+        ChatRequest request = new ChatRequest();
+        request.setSessionNo("session-3");
+        request.setUserId("user-1");
+        request.setMessage("给这两个人出面试题");
+
+        ChatResponse response = service.chat(request);
+        List<ChatStreamEvent> events = service.stream(request);
+
+        assertEquals(ChatScene.INTERVIEW, response.getScene());
+        assertEquals("推荐系统", response.getInterviewResponse().getTargetQuery());
+        assertEquals("interview", events.get(4).getEvent());
         assertEquals("state_update", events.get(5).getEvent());
         assertFalse(events.stream().anyMatch(event -> "citation".equals(event.getEvent())));
         assertTrue(events.stream().anyMatch(event -> "token".equals(event.getEvent())));

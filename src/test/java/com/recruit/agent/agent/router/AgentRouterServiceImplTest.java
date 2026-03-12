@@ -59,4 +59,21 @@ class AgentRouterServiceImplTest {
         assertEquals("searchCandidateByJDTool", decision.getToolName());
         assertFalse(decision.isHistoryRequired());
     }
+
+    @Test
+    void shouldRouteToInterviewWhenHistoryExistsAndInputLooksLikeInterviewGeneration() {
+        AgentRouterServiceImpl routerService = new AgentRouterServiceImpl();
+
+        AgentRoutingContext context = new AgentRoutingContext();
+        context.setCurrentScene(ChatScene.COMPARE);
+        context.setCurrentQuery("推荐系统");
+        context.setLastCandidateIdsJson("[\"candidate-1\",\"candidate-2\"]");
+        context.setUserInput("给这两个人出一套面试题");
+
+        AgentRouteDecision decision = routerService.route(context);
+
+        assertEquals(ChatScene.INTERVIEW, decision.getScene());
+        assertEquals("generateInterviewQuestionsTool", decision.getToolName());
+        assertTrue(decision.isHistoryRequired());
+    }
 }
