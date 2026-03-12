@@ -1,6 +1,7 @@
 package com.recruit.agent.agent.orchestrator.dto;
 
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
+import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,6 +29,11 @@ public class AgentExecuteResponse {
      * 搜索结果。
      */
     private CandidateSearchResponse searchResponse;
+
+    /**
+     * 对比结果。
+     */
+    private CandidateComparisonResponse comparisonResponse;
 
     /**
      * 面向上层的简短摘要。

@@ -2,7 +2,6 @@ package com.recruit.agent.agent.execution;
 
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
 import com.recruit.agent.chat.state.ChatSessionState;
-import com.recruit.agent.search.vo.CandidateSearchResponse;
 
 /**
  * Agent 工具执行服务。
@@ -17,5 +16,5 @@ public interface AgentToolExecutionService {
      * @param userInput 用户输入
      * @return 工具执行结果
      */
-    CandidateSearchResponse execute(AgentRouteDecision routeDecision, ChatSessionState state, String userInput);
+    AgentToolExecutionResult execute(AgentRouteDecision routeDecision, ChatSessionState state, String userInput);
 }

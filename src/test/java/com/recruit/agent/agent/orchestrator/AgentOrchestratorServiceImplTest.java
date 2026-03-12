@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.recruit.agent.agent.execution.AgentToolExecutionResult;
 import com.recruit.agent.agent.execution.AgentToolExecutionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.recruit.agent.agent.orchestrator.dto.AgentExecuteRequest;
@@ -65,6 +66,8 @@ class AgentOrchestratorServiceImplTest {
         CandidateSearchResponse searchResponse = new CandidateSearchResponse();
         searchResponse.setTotal(1);
         searchResponse.setCandidates(List.of(item));
+        AgentToolExecutionResult executionResult = new AgentToolExecutionResult();
+        executionResult.setSearchResponse(searchResponse);
 
         ChatMessage existingMessage = new ChatMessage();
         existingMessage.setSequenceNo(1);
@@ -72,7 +75,7 @@ class AgentOrchestratorServiceImplTest {
         when(sessionRepository.findBySessionNo("session-1")).thenReturn(Optional.of(session));
         when(stateService.load(session)).thenReturn(state);
         when(routerService.route(any())).thenReturn(decision);
-        when(agentToolExecutionService.execute(any(), any(), any())).thenReturn(searchResponse);
+        when(agentToolExecutionService.execute(any(), any(), any())).thenReturn(executionResult);
         when(messageRepository.findBySessionIdOrderBySequenceNoAsc("session-id")).thenReturn(List.of(), List.of(existingMessage));
         when(sessionRepository.save(any(ChatSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

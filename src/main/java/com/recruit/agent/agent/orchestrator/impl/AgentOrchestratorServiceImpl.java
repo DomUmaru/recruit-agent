@@ -1,5 +1,6 @@
 package com.recruit.agent.agent.orchestrator.impl;
 
+import com.recruit.agent.agent.execution.AgentToolExecutionResult;
 import com.recruit.agent.agent.execution.AgentToolExecutionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,7 +19,6 @@ import com.recruit.agent.chat.repository.ChatMessageRepository;
 import com.recruit.agent.chat.repository.ChatSessionRepository;
 import com.recruit.agent.chat.state.ChatSessionState;
 import com.recruit.agent.chat.state.ChatSessionStateService;
-import com.recruit.agent.search.vo.CandidateSearchResponse;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -61,19 +61,20 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
         saveMessage(session, ChatMessageRole.USER, safeRequest.getUserInput(), null);
 
         AgentRouteDecision routeDecision = agentRouterService.route(buildRoutingContext(safeRequest, session));
-        CandidateSearchResponse searchResponse = agentToolExecutionService.execute(routeDecision, state, safeRequest.getUserInput());
+        AgentToolExecutionResult executionResult = agentToolExecutionService.execute(routeDecision, state, safeRequest.getUserInput());
 
-        updateState(state, routeDecision, safeRequest.getUserInput(), searchResponse);
+        updateState(state, routeDecision, safeRequest.getUserInput(), executionResult);
         chatSessionStateService.apply(session, state);
         chatSessionRepository.save(session);
 
-        String summary = buildSummary(searchResponse, routeDecision);
+        String summary = buildSummary(executionResult, routeDecision);
         saveMessage(session, ChatMessageRole.ASSISTANT, summary, routeDecision);
 
         AgentExecuteResponse response = new AgentExecuteResponse();
         response.setSessionNo(session.getSessionNo());
         response.setRouteDecision(routeDecision);
-        response.setSearchResponse(searchResponse);
+        response.setSearchResponse(executionResult.getSearchResponse());
+        response.setComparisonResponse(executionResult.getComparisonResponse());
         response.setSummary(summary);
         return response;
     }
@@ -108,18 +109,24 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
     private void updateState(ChatSessionState state,
                              AgentRouteDecision routeDecision,
                              String userInput,
-                             CandidateSearchResponse searchResponse) {
+                             AgentToolExecutionResult executionResult) {
         state.setCurrentScene(routeDecision.getScene());
         state.setCurrentQuery(routeDecision.getScene() == ChatScene.FILTER_REFINE
             ? mergeQuery(state.getCurrentQuery(), userInput)
             : userInput);
-        state.setLastCandidateIds(searchResponse == null || searchResponse.getCandidates() == null
-            ? List.of()
-            : searchResponse.getCandidates().stream().map(candidate -> candidate.getCandidateId()).toList());
+        if (executionResult.getSearchResponse() != null && executionResult.getSearchResponse().getCandidates() != null) {
+            state.setLastCandidateIds(executionResult.getSearchResponse().getCandidates().stream()
+                .map(candidate -> candidate.getCandidateId())
+                .toList());
+        }
     }
 
-    private String buildSummary(CandidateSearchResponse response, AgentRouteDecision routeDecision) {
-        int total = response == null ? 0 : response.getTotal();
+    private String buildSummary(AgentToolExecutionResult executionResult, AgentRouteDecision routeDecision) {
+        if (routeDecision.getScene() == ChatScene.COMPARE && executionResult.getComparisonResponse() != null) {
+            return executionResult.getComparisonResponse().getSummary();
+        }
+
+        int total = executionResult.getSearchResponse() == null ? 0 : executionResult.getSearchResponse().getTotal();
         if (routeDecision.getScene() == ChatScene.FILTER_REFINE) {
             return "已根据最新筛选条件完成 refinement，返回 " + total + " 位候选人。";
         }

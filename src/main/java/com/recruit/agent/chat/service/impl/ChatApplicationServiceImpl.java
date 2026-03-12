@@ -13,6 +13,7 @@ import com.recruit.agent.chat.dto.ChatStreamEvent;
 import com.recruit.agent.chat.dto.ChatTokenPayload;
 import com.recruit.agent.chat.dto.ChatToolCallPayload;
 import com.recruit.agent.chat.service.ChatApplicationService;
+import com.recruit.agent.chat.model.ChatScene;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
 import java.util.ArrayList;
@@ -45,9 +46,11 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
         events.add(event("start", toSessionPayload(executeResponse)));
         events.add(event("router_decision", toRouterDecisionPayload(executeResponse)));
         events.add(event("tool_call", toToolCallPayload(executeResponse)));
-        events.add(event("tool_result", executeResponse.getSearchResponse()));
+        events.add(event("tool_result", resolveToolResult(executeResponse)));
         events.add(event("state_update", toStateUpdatePayload(executeResponse)));
-        events.addAll(toCitationEvents(executeResponse));
+        if (executeResponse.getRouteDecision().getScene() != ChatScene.COMPARE) {
+            events.addAll(toCitationEvents(executeResponse));
+        }
         events.addAll(toTokenEvents(executeResponse.getSummary()));
         events.add(event("done", toChatResponse(executeResponse)));
         return events;
@@ -68,6 +71,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
         response.setToolName(executeResponse.getRouteDecision().getToolName());
         response.setSummary(executeResponse.getSummary());
         response.setSearchResponse(executeResponse.getSearchResponse());
+        response.setComparisonResponse(executeResponse.getComparisonResponse());
         return response;
     }
 
@@ -110,6 +114,13 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
                 .map(CandidateSearchItemVO::getCandidateId)
                 .toList());
         return payload;
+    }
+
+    private Object resolveToolResult(AgentExecuteResponse executeResponse) {
+        if (executeResponse.getRouteDecision().getScene() == ChatScene.COMPARE) {
+            return executeResponse.getComparisonResponse();
+        }
+        return executeResponse.getSearchResponse();
     }
 
     private List<ChatStreamEvent> toCitationEvents(AgentExecuteResponse executeResponse) {

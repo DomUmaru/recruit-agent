@@ -2,12 +2,15 @@ package com.recruit.agent.agent.execution.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.recruit.agent.agent.execution.AgentToolExecutionResult;
 import com.recruit.agent.agent.execution.AgentToolExecutionService;
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
+import com.recruit.agent.agent.tool.springai.CompareCandidatesTools;
 import com.recruit.agent.agent.tool.springai.RefineSearchTools;
 import com.recruit.agent.agent.tool.springai.SearchCandidateTools;
 import com.recruit.agent.chat.model.ChatScene;
 import com.recruit.agent.chat.state.ChatSessionState;
+import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -24,35 +27,55 @@ import org.springframework.stereotype.Service;
 public class SpringAiAgentToolExecutionService implements AgentToolExecutionService {
 
     private final ChatClient recruitAgentChatClient;
+    private final CompareCandidatesTools compareCandidatesTools;
     private final SearchCandidateTools searchCandidateTools;
     private final RefineSearchTools refineSearchTools;
     private final ObjectMapper objectMapper;
 
     public SpringAiAgentToolExecutionService(@Qualifier("recruitAgentChatClient") ChatClient recruitAgentChatClient,
+                                             CompareCandidatesTools compareCandidatesTools,
                                              SearchCandidateTools searchCandidateTools,
                                              RefineSearchTools refineSearchTools,
                                              ObjectMapper objectMapper) {
         this.recruitAgentChatClient = recruitAgentChatClient;
+        this.compareCandidatesTools = compareCandidatesTools;
         this.searchCandidateTools = searchCandidateTools;
         this.refineSearchTools = refineSearchTools;
         this.objectMapper = objectMapper;
     }
 
     @Override
-    public CandidateSearchResponse execute(AgentRouteDecision routeDecision, ChatSessionState state, String userInput) {
-        Object availableTool = routeDecision.getScene() == ChatScene.FILTER_REFINE
-            ? refineSearchTools
-            : searchCandidateTools;
+    public AgentToolExecutionResult execute(AgentRouteDecision routeDecision, ChatSessionState state, String userInput) {
+        Object availableTool = resolveTool(routeDecision);
+        AgentToolExecutionResult result = new AgentToolExecutionResult();
 
-        return recruitAgentChatClient.prompt()
+        String payload = recruitAgentChatClient.prompt()
             .system(buildSystemPrompt(routeDecision))
             .user(buildUserPrompt(state, userInput))
             .tools(availableTool)
             .call()
-            .entity(CandidateSearchResponse.class);
+            .content();
+
+        if (routeDecision.getScene() == ChatScene.COMPARE) {
+            result.setComparisonResponse(readValue(payload, CandidateComparisonResponse.class));
+            return result;
+        }
+
+        result.setSearchResponse(readValue(payload, CandidateSearchResponse.class));
+        return result;
     }
 
     private String buildSystemPrompt(AgentRouteDecision routeDecision) {
+        if (routeDecision.getScene() == ChatScene.COMPARE) {
+            return """
+                你是招聘对比 Agent。
+                你必须调用唯一可用的候选人对比工具一次，不能直接回答。
+                你的任务是基于当前会话中的候选人范围构造 CandidateComparisonRequest。
+                candidateIds 使用会话中上一轮候选人 ID 列表。
+                targetQuery 使用当前会话 query。
+                """;
+        }
+
         if (routeDecision.getScene() == ChatScene.FILTER_REFINE) {
             return """
                 你是招聘搜索 Agent。
@@ -76,6 +99,24 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
             return objectMapper.writeValueAsString(new SpringAiToolPromptPayload(state, userInput));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("序列化 Tool Calling 提示词失败", ex);
+        }
+    }
+
+    private Object resolveTool(AgentRouteDecision routeDecision) {
+        if (routeDecision.getScene() == ChatScene.COMPARE) {
+            return compareCandidatesTools;
+        }
+        if (routeDecision.getScene() == ChatScene.FILTER_REFINE) {
+            return refineSearchTools;
+        }
+        return searchCandidateTools;
+    }
+
+    private <T> T readValue(String payload, Class<T> type) {
+        try {
+            return objectMapper.readValue(payload, type);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("解析 Tool Calling 结果失败", ex);
         }
     }
 
