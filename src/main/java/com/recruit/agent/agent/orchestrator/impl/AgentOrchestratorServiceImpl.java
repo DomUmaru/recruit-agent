@@ -10,6 +10,7 @@ import com.recruit.agent.agent.orchestrator.dto.AgentExecuteResponse;
 import com.recruit.agent.agent.router.AgentRouterService;
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
 import com.recruit.agent.agent.router.dto.AgentRoutingContext;
+import com.recruit.agent.agent.selection.CandidateSelectionService;
 import com.recruit.agent.chat.model.ChatMessage;
 import com.recruit.agent.chat.model.ChatMessageRole;
 import com.recruit.agent.chat.model.ChatScene;
@@ -32,6 +33,7 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
 
     private final AgentRouterService agentRouterService;
     private final AgentToolExecutionService agentToolExecutionService;
+    private final CandidateSelectionService candidateSelectionService;
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatSessionStateService chatSessionStateService;
@@ -39,12 +41,14 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
 
     public AgentOrchestratorServiceImpl(AgentRouterService agentRouterService,
                                         AgentToolExecutionService agentToolExecutionService,
+                                        CandidateSelectionService candidateSelectionService,
                                         ChatSessionRepository chatSessionRepository,
                                         ChatMessageRepository chatMessageRepository,
                                         ChatSessionStateService chatSessionStateService,
                                         ObjectMapper objectMapper) {
         this.agentRouterService = agentRouterService;
         this.agentToolExecutionService = agentToolExecutionService;
+        this.candidateSelectionService = candidateSelectionService;
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.chatSessionStateService = chatSessionStateService;
@@ -61,6 +65,7 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
         saveMessage(session, ChatMessageRole.USER, safeRequest.getUserInput(), null);
 
         AgentRouteDecision routeDecision = agentRouterService.route(buildRoutingContext(safeRequest, session));
+        applySelection(state, routeDecision, safeRequest.getUserInput());
         AgentToolExecutionResult executionResult = agentToolExecutionService.execute(routeDecision, state, safeRequest.getUserInput());
 
         updateState(state, routeDecision, safeRequest.getUserInput(), executionResult);
@@ -107,6 +112,17 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
         return context;
     }
 
+    private void applySelection(ChatSessionState state, AgentRouteDecision routeDecision, String userInput) {
+        if (routeDecision.getScene() != ChatScene.COMPARE && routeDecision.getScene() != ChatScene.INTERVIEW) {
+            return;
+        }
+
+        List<String> selectedCandidateIds = candidateSelectionService.resolveSelectedCandidateIds(state, userInput);
+        if (selectedCandidateIds != null && !selectedCandidateIds.isEmpty()) {
+            state.setSelectedCandidateIds(selectedCandidateIds);
+        }
+    }
+
     private void updateState(ChatSessionState state,
                              AgentRouteDecision routeDecision,
                              String userInput,
@@ -127,6 +143,7 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
             state.setLastCandidateIds(executionResult.getSearchResponse().getCandidates().stream()
                 .map(candidate -> candidate.getCandidateId())
                 .toList());
+            state.setSelectedCandidateIds(null);
         }
     }
 

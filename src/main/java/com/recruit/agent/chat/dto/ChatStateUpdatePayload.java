@@ -19,4 +19,6 @@ public class ChatStateUpdatePayload {
     private String currentQuery;
 
     private List<String> lastCandidateIds;
+
+    private List<String> selectedCandidateIds;
 }

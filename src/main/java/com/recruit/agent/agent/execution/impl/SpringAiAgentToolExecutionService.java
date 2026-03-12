@@ -81,7 +81,7 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
                 你是招聘对比 Agent。
                 你必须调用唯一可用的候选人对比工具一次，不能直接回答。
                 你的任务是基于当前会话中的候选人范围构造合法的 CandidateComparisonRequest。
-                candidateIds 使用会话中的 lastCandidateIds。
+                candidateIds 优先使用会话中的 selectedCandidateIds；如果为空，则使用 lastCandidateIds。
                 targetQuery 使用当前会话 query。
                 """;
         }

@@ -131,6 +131,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
                 : executeResponse.getInterviewResponse().getCandidates().stream()
                     .map(CandidateInterviewQuestionVO::getCandidateId)
                     .toList());
+            payload.setSelectedCandidateIds(payload.getLastCandidateIds());
             return payload;
         }
 
@@ -141,6 +142,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
                 : executeResponse.getComparisonResponse().getCandidates().stream()
                     .map(CandidateComparisonItemVO::getCandidateId)
                     .toList());
+            payload.setSelectedCandidateIds(payload.getLastCandidateIds());
             return payload;
         }
 
@@ -150,6 +152,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
             : executeResponse.getSearchResponse().getCandidates().stream()
                 .map(CandidateSearchItemVO::getCandidateId)
                 .toList());
+        payload.setSelectedCandidateIds(List.of());
         return payload;
     }
 

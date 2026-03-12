@@ -43,7 +43,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
 
         if (routeDecision.getScene() == ChatScene.COMPARE) {
             CandidateComparisonRequest comparisonRequest = new CandidateComparisonRequest();
-            comparisonRequest.setCandidateIds(state.getLastCandidateIds());
+            comparisonRequest.setCandidateIds(resolveSelectedOrLastCandidateIds(state));
             comparisonRequest.setTargetQuery(state.getCurrentQuery());
             result.setComparisonResponse(compareCandidatesToolService.execute(comparisonRequest));
             return result;
@@ -75,6 +75,10 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
     }
 
     private java.util.List<String> resolveInterviewCandidateIds(ChatSessionState state) {
+        return resolveSelectedOrLastCandidateIds(state);
+    }
+
+    private java.util.List<String> resolveSelectedOrLastCandidateIds(ChatSessionState state) {
         if (state.getSelectedCandidateIds() != null && !state.getSelectedCandidateIds().isEmpty()) {
             return state.getSelectedCandidateIds();
         }
