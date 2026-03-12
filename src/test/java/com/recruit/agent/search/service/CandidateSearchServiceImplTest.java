@@ -2,6 +2,7 @@ package com.recruit.agent.search.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -100,6 +101,7 @@ class CandidateSearchServiceImplTest {
         assertEquals(1, response.getTotal());
         assertEquals("candidate-1", response.getCandidates().get(0).getCandidateId());
         assertEquals("上海", response.getCandidates().get(0).getCurrentCity());
+        assertTrue(Double.isFinite(response.getCandidates().get(0).getMatchScore()));
         assertFalse(response.getCandidates().get(0).getEvidenceList().isEmpty());
         assertFalse(response.getCandidates().get(0).getMatchReasons().isEmpty());
     }

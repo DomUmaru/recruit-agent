@@ -82,6 +82,8 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
 
         if (query.isBlank()) {
             builder.withSort(sort -> sort.field(field -> field.field("totalYearsOfExperience").order(SortOrder.Desc)));
+        } else {
+            builder.withSort(sort -> sort.score(score -> score.order(SortOrder.Desc)));
         }
         builder.withSort(sort -> sort.field(field -> field.field("candidateNo").order(SortOrder.Asc)));
         return builder.build();
@@ -195,10 +197,18 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         item.setBigTech(profile.getBigTech());
         item.setOutsourcing(profile.getOutsourcing());
         item.setProfileSummary(profile.getProfileSummary());
-        item.setMatchScore(hit.getScore());
+        item.setMatchScore(resolveMatchScore(hit));
         item.setMatchReasons(candidateMatchReasonService.buildMatchReasons(profile, query, queryTerms, filter));
         item.setEvidenceList(loadEvidence(profile.getCandidateId(), query, queryTerms, evidenceLimit));
         return item;
+    }
+
+    private double resolveMatchScore(SearchHit<?> hit) {
+        if (hit == null) {
+            return 0.0d;
+        }
+        double score = hit.getScore();
+        return Double.isFinite(score) ? score : 0.0d;
     }
 
     private List<CandidateSearchEvidenceVO> loadEvidence(String candidateId,
