@@ -12,6 +12,7 @@ import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
+import com.recruit.agent.search.normalization.impl.SearchRequestNormalizationServiceImpl;
 import com.recruit.agent.search.parser.impl.RuleBasedNaturalLanguageSearchFilterParser;
 import com.recruit.agent.search.service.impl.CandidateSearchServiceImpl;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
@@ -31,7 +32,7 @@ class CandidateSearchServiceImplTest {
         ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
         CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
             elasticsearchOperations,
-            new RuleBasedNaturalLanguageSearchFilterParser()
+            new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser())
         );
 
         CandidateProfileIndex matched = new CandidateProfileIndex();
