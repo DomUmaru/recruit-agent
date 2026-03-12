@@ -37,3 +37,8 @@ python/ocr-service/.cache/
 python/ocr-service/*.log
 python/ocr-service/*.pid
 python/ocr-service/__pycache__/
+python/embedding-service/.venv/
+python/embedding-service/.cache/
+python/embedding-service/*.log
+python/embedding-service/*.pid
+python/embedding-service/__pycache__/

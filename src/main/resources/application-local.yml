@@ -33,5 +33,12 @@ app:
     recognize-path: /api/ocr/recognize
     connect-timeout-ms: 10000
     read-timeout-ms: 180000
+  embedding:
+    provider: bge-m3
+    base-url: http://localhost:9002
+    embed-path: /api/embedding/embed
+    connect-timeout-ms: 10000
+    read-timeout-ms: 120000
+    dimension: 1024
   resume:
     upload-dir: data/uploads/resumes
