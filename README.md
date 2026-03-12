@@ -2,376 +2,309 @@
 
 面向 ToB 招聘场景的智能招聘与面试辅助 Agent 后端系统。
 
-## 项目目标
+## 当前状态
 
-项目面向 HR、招聘专员和技术面试官，目标是构建一套可对话的招聘工作台，覆盖这些核心场景：
+项目已经完成第一版可运行主链，当前不是“规划中”，而是一个可本地联调的后端 MVP。
 
-- 候选人简历上传、解析与结构化入库
-- 基于 JD 或自然语言的候选人搜索
-- 条件筛选、多轮 refinement 和候选人对比
-- 基于简历和 JD 生成面试问题与追问建议
-- 通过统一 chat 入口完成搜索、筛选、对比和面试题生成
+当前已经打通的核心链路：
 
-当前技术路线：
+- 简历上传
+- PDF 文本解析
+- OCR fallback
+- Resume Chunk 索引
+- Candidate Profile 索引
+- 候选人搜索
+- refinement 多轮筛选
+- 候选人对比
+- 面试题生成
+- Agent Router / Tool Calling
+- Chat API / SSE
+- 本地 PaddleOCR
+- 本地 BGE-M3 embedding
+- 本地 bge-reranker-v2-m3 rerank
 
-- MySQL：主数据存储
-- Elasticsearch：检索索引与候选人画像索引
-- PDFBox / OCR：简历解析
-- Spring Boot：后端服务
-- Spring AI：Agent 与 Tool Calling 编排
-- SSE：流式对话输出
+## 技术栈
 
-## 当前进度
+- Java 17
+- Spring Boot 3.4.x
+- Spring AI
+- MySQL 8
+- Elasticsearch 8
+- PDFBox
+- PaddleOCR 3.0
+- BGE-M3
+- bge-reranker-v2-m3
+- SSE
 
-当前仓库已经完成 `Step 1`、`Step 2`、`Step 3`、`Step 4` 和 `Step 5` 的 MVP 主链，并补齐了候选人对比与面试题生成功能。
+## 模块结构
 
-### Step 1 已完成
+```text
+src/main/java/com/recruit/agent
+├─ agent
+├─ candidate
+├─ chat
+├─ common
+├─ comparison
+├─ interview
+├─ position
+├─ rag
+├─ resume
+└─ search
 
-- Spring Boot + Java 17 工程骨架
-- Maven Wrapper、本仓库内 Maven settings
-- 核心 JPA Entity 建模
-- Elasticsearch Document 建模
-- Repository 接口
-- MySQL DDL 与 Elasticsearch mapping 文档冻结
+python
+├─ ocr-service
+├─ embedding-service
+└─ rerank-service
+```
 
-### Step 2 已完成
+## 已完成能力
 
-- 简历上传接口
-- 本地文件落盘
-- `resume_document` 落库与版本管理
-- PDFBox 文本型 PDF 解析
-- OCR fallback 编排骨架
+### 1. 简历摄入
+
+- `POST /api/resumes/upload`
+- 文件落盘与版本管理
+- `resume_document` 状态流转
+- PDFBox 文本提取
+- OCR fallback 判定与接入
 - 文本清洗
 - Parent-Child Chunking
 - `resume_chunk` 写入 Elasticsearch
 - 规则式候选人画像抽取
 - `candidate_profile` 写入 Elasticsearch
 
-### Step 3 已完成的基础能力
+### 2. 搜索与 refinement
 
-- 候选人搜索模块 `search`
-- 基于 `CandidateProfileIndex` 的候选人级检索
-- 基于 `ResumeChunk` 的证据级召回
-- 结构化过滤：
-  - 学历
-  - 学校层级
-  - 年限
-  - 技术栈
-  - 城市
-  - 大厂
-  - 外包
-- refinement 请求模型与合并策略
-- 候选人范围限定 `scopeCandidateIds`
-- 搜索 API：
-  - `POST /api/search/candidates`
-  - `POST /api/search/candidates/refine`
+- `POST /api/search/candidates`
+- `POST /api/search/candidates/refine`
+- 候选人级 ES 检索
+- 证据级 Chunk 召回
+- 自然语言 filter parsing
+- refinement merge
+- scope candidate ids
+- rerank 精排
 
-### Step 4 已完成的基础能力
+当前支持的主要筛选维度：
 
-- `SEARCH` / `FILTER_REFINE` / `COMPARE` / `INTERVIEW` 路由决策
-- Router 决策对象与上下文模型
-- Tool 风格的服务封装
-- 会话状态装配：
-  - `filtersJson`
-  - `lastCandidateIdsJson`
-  - `selectedCandidateIdsJson`
-- Agent Orchestrator MVP
-- Spring AI Tool Calling 接入
-- 正式 Tool：
-  - `searchCandidateByJDTool`
-  - `refineSearchFilterTool`
-  - `compareCandidatesTool`
-  - `generateInterviewQuestionsTool`
-- `ChatClient` 配置与无模型回退执行策略
+- 学历
+- 学校层级
+- 年限
+- 技术栈
+- 城市
+- 大厂
+- 外包
 
-### Step 5 已完成的 MVP
+### 3. Agent 主链
 
-- 普通 chat 接口：
-  - `POST /api/chat`
-- SSE 流式接口：
-  - `POST /api/chat/stream`
-- 当前 SSE 事件协议：
-  - `start`
-  - `router_decision`
-  - `tool_call`
-  - `tool_result`
-  - `state_update`
-  - `citation`
-  - `comparison`
-  - `interview`
-  - `token`
-  - `done`
-  - `error`
+- Router 场景识别：
+  - `SEARCH`
+  - `FILTER_REFINE`
+  - `COMPARE`
+  - `INTERVIEW`
+- 会话状态管理
+- Deterministic execution
+- Spring AI Tool Calling
 
-### 已补齐的业务能力
+当前正式 Tool：
 
-- `comparison` 模块
-  - 候选人横向对比
-  - 输出亮点、风险点、证据片段和总结
-  - 对外接口：`POST /api/comparison/candidates`
-- `interview` 模块
-  - 基于候选人画像与简历证据生成结构化面试题
-  - 输出候选人级题集、问题分类、提问理由和证据
-  - 对外接口：`POST /api/interview/questions`
+- `searchCandidateByJDTool`
+- `refineSearchFilterTool`
+- `compareCandidatesTool`
+- `generateInterviewQuestionsTool`
 
-## 最近提交
+### 4. Chat / SSE
 
-- `5de734c` `feat: add interview question generation flow`
-- `6906c47` `feat: enrich comparison chat payloads`
-- `55059c8` `feat: add candidate comparison tool flow`
-- `16cbc78` `feat: add chat api and sse event streaming`
-- `cd08d35` `feat: add spring ai tool calling and agent orchestrator`
-- `bfa371a` `feat: add search retrieval and agent routing foundation`
-- `e7ca4c0` `feat: complete step2 resume ingestion mvp`
-- `76f96ea` `feat: complete step1 domain modeling baseline`
+- `POST /api/chat`
+- `POST /api/chat/stream`
 
-## 已验证链路
+当前 SSE 事件：
 
-当前已经通过测试与本地联调验证的链路包括：
+- `start`
+- `router_decision`
+- `tool_call`
+- `tool_result`
+- `state_update`
+- `citation`
+- `comparison`
+- `token`
+- `done`
+- `error`
 
-- MySQL 容器启动并自动执行 schema
-- Elasticsearch 与 Kibana 可用
-- 简历上传成功
-- PDF 正文提取成功
-- `ResumeChunk` 索引写入成功
-- `CandidateProfileIndex` 索引写入成功
-- 英文年限表达如 `5 years` 可抽取为 `5.0`
-- 搜索服务、refinement 服务、Agent Router、Agent Orchestrator 单元测试通过
-- comparison 与 interview 服务单元测试通过
-- chat API 与 SSE 事件流测试通过
+### 5. 对比与面试题
 
-说明：
+- `POST /api/comparison/candidates`
+- `POST /api/interview/questions`
 
-- PowerShell 终端查看 Elasticsearch 返回值时，中文可能显示为乱码
-- 经原始字节检查，ES 中保存的 UTF-8 数据是正确的
-- 更推荐在 Kibana 或浏览器中查看中文字段
+已支持：
 
-## 当前模块结构
+- 候选人横向对比
+- 差异点和风险点汇总
+- 基于简历与目标查询的结构化面试题生成
 
-```text
-src/main/java/com/recruit/agent
-├── agent
-├── candidate
-├── chat
-├── common
-├── comparison
-├── interview
-├── position
-├── rag
-├── resume
-└── search
+## 本地模型能力
 
-docs/schema
-├── mysql-schema-v1.sql
-└── elasticsearch-indexes-v1.json
-```
+### OCR
 
-## 核心模型
+- 本地服务目录：
+  - [python/ocr-service/README.md](/C:/Users/Type-umr/Desktop/recruit-agent/python/ocr-service/README.md)
+- Java 配置：
+  - `app.ocr.provider=paddle`
+- 已完成真实联调：
+  - 扫描版 PDF 上传
+  - OCR fallback
+  - `parse_type=OCR_SCANNED`
 
-### MySQL 实体
+### Embedding
 
-- `Candidate`
-- `ResumeDocument`
-- `PositionJD`
-- `ChatSession`
-- `ChatMessage`
+- 本地服务目录：
+  - [python/embedding-service/README.md](/C:/Users/Type-umr/Desktop/recruit-agent/python/embedding-service/README.md)
+- Java 配置：
+  - `app.embedding.provider=bge-m3`
+- 已完成真实联调：
+  - chunk embedding 写入 ES
 
-### Elasticsearch 索引文档
+### Rerank
 
-- `ResumeChunk`
-- `CandidateProfileIndex`
+- 本地服务目录：
+  - [python/rerank-service/README.md](/C:/Users/Type-umr/Desktop/recruit-agent/python/rerank-service/README.md)
+- Java 配置：
+  - `app.rerank.provider=bge-reranker-v2-m3`
+- 已完成真实联调：
+  - search API 调用本地 rerank 服务
+  - 返回 `rerankScore`
 
-## 本地开发
+## 本地运行
 
-### 1. 环境变量
-
-先复制环境变量模板：
-
-```powershell
-Copy-Item .env.example .env
-```
-
-如果要启用 Spring AI 的 OpenAI 模型调用，请在 `.env` 中配置：
-
-```powershell
-OPENAI_API_KEY=your_api_key
-```
-
-默认配置为：
-
-- `spring.ai.model.chat=none`
-
-也就是说，不配置模型时应用仍可启动，并走确定性回退链路。
-
-### 2. 编译
-
-推荐使用仓库内的 Maven Wrapper，并显式指定当前仓库配置：
-
-```powershell
-.\mvnw.cmd -gs global-settings.xml -s settings.xml -DskipTests compile
-```
-
-### 3. 启动基础设施
+### 1. 启动基础设施
 
 ```powershell
 docker compose up -d
 ```
 
-当前默认端口：
+默认端口：
 
-- MySQL: `localhost:3307`
-- Elasticsearch: `http://localhost:9200`
-- Kibana: `http://localhost:5601`
+- MySQL: `3307`
+- Elasticsearch: `9200`
+- Kibana: `5601`
 
-MySQL 启动时会自动执行：
+### 2. 启动本地模型服务
 
-- [mysql-schema-v1.sql](/C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/mysql-schema-v1.sql)
-
-### 4. 启动应用
-
-使用本地 profile 启动：
+OCR:
 
 ```powershell
+cd python/ocr-service
+.\install.ps1
+.\start.ps1
+```
+
+Embedding:
+
+```powershell
+cd python/embedding-service
+.\install.ps1
+.\start.ps1
+```
+
+Rerank:
+
+```powershell
+cd python/rerank-service
+.\install.ps1
+.\start.ps1
+```
+
+### 3. 启动应用
+
+```powershell
+$env:OPENAI_API_KEY='dummy'
 .\mvnw.cmd -gs global-settings.xml -s settings.xml spring-boot:run "-Dspring-boot.run.profiles=local"
 ```
 
-如果本机 Maven Wrapper 后台启动不稳定，也可以先打包再运行：
+说明：
 
-```powershell
-.\mvnw.cmd -gs global-settings.xml -s settings.xml -DskipTests package
-java -jar target/recruit-agent-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
-```
+- 当前本地 profile 已默认接入 OCR / embedding / rerank
+- `OPENAI_API_KEY` 目前即使不真正调用 OpenAI，也建议给一个占位值，否则部分 Spring AI 自动配置会拦启动
 
-### 5. 运行测试
+### 4. 运行测试
 
 ```powershell
 .\mvnw.cmd -gs global-settings.xml -s settings.xml test
 ```
 
-## 主要接口
+## 查看 Elasticsearch 数据
 
-### 简历上传
+### 方式 1：Kibana
 
-`POST /api/resumes/upload`
+打开：
 
-请求类型：
+- `http://localhost:5601`
 
-- `multipart/form-data`
+在 `Dev Tools` 中执行：
 
-表单字段：
-
-- `candidateId`
-- `file`
-
-### 候选人搜索
-
-`POST /api/search/candidates`
-
-请求体示例：
-
-```json
+```http
+GET resume_chunk/_search
 {
-  "query": "推荐系统 Java",
-  "filter": {
-    "highestDegrees": ["BACHELOR"],
-    "schoolTiers": ["PROJECT_985"],
-    "minYearsOfExperience": 3.0,
-    "technicalSkills": ["Java"],
-    "bigTech": true,
-    "outsourcing": false
-  },
-  "limit": 10,
-  "evidenceLimit": 3
+  "size": 5,
+  "sort": [
+    { "indexedAt": "desc" }
+  ]
 }
 ```
 
-### 候选人 refinement 搜索
+查看候选人画像：
 
-`POST /api/search/candidates/refine`
-
-请求体示例：
-
-```json
+```http
+GET candidate_profile/_search
 {
-  "baseRequest": {
-    "query": "推荐系统",
-    "scopeCandidateIds": ["candidate-1", "candidate-2"]
-  },
-  "refinementQuery": "只要985和211，再加3年以上",
-  "mergeMode": "APPEND"
+  "size": 5,
+  "sort": [
+    { "indexedAt": "desc" }
+  ]
 }
 ```
 
-### 候选人对比
+### 方式 2：命令行
 
-`POST /api/comparison/candidates`
-
-请求体示例：
-
-```json
-{
-  "candidateIds": ["candidate-1", "candidate-2"],
-  "targetQuery": "推荐系统"
-}
+```powershell
+docker exec recruit-agent-es curl -s "http://localhost:9200/candidate_profile/_search?size=5&sort=indexedAt:desc"
 ```
 
-### 面试题生成
+查看某个候选人的 chunk：
 
-`POST /api/interview/questions`
-
-请求体示例：
-
-```json
-{
-  "candidateIds": ["candidate-1"],
-  "targetQuery": "推荐系统"
-}
+```powershell
+docker exec recruit-agent-es curl -s "http://localhost:9200/resume_chunk/_search?q=candidateId:candidate-ocr-e2e-001&size=5&sort=indexedAt:desc"
 ```
 
-### 普通聊天
+检查 embedding 字段是否存在：
 
-`POST /api/chat`
-
-请求体示例：
-
-```json
-{
-  "sessionNo": "session-1",
-  "userId": "user-1",
-  "message": "找做推荐系统的候选人"
-}
+```powershell
+docker exec recruit-agent-es curl -s "http://localhost:9200/resume_chunk/_count?q=candidateId:candidate-ocr-e2e-001%20AND%20_exists_:embedding"
 ```
 
-### SSE 流式聊天
+## 最近提交
 
-`POST /api/chat/stream`
-
-返回 `text/event-stream`，当前会输出结构化事件序列。
-
-## 文档与配置
-
-- 项目规划文档：[NEW_PROJECT_SUMMARY.md](/C:/Users/Type-umr/Desktop/recruit-agent/NEW_PROJECT_SUMMARY.md)
-- MySQL DDL：[mysql-schema-v1.sql](/C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/mysql-schema-v1.sql)
-- Elasticsearch mapping：[elasticsearch-indexes-v1.json](/C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/elasticsearch-indexes-v1.json)
-- 本地 Docker 环境：[docker-compose.yml](/C:/Users/Type-umr/Desktop/recruit-agent/docker-compose.yml)
-- 本地应用配置：[application-local.yml](/C:/Users/Type-umr/Desktop/recruit-agent/src/main/resources/application-local.yml)
+- `edc895f` `fix: normalize candidate search match scores`
+- `eedc88d` `feat: add local rerank integration`
+- `ed8b1b7` `feat: add local bge-m3 embedding integration`
+- `7367d8e` `feat: add local paddle ocr integration`
+- `2e0e5dc` `refactor: extract candidate match reason service`
+- `6867430` `refactor: split search request normalization`
+- `15f30d8` `feat: add natural language search filter parsing`
+- `d8e3f4c` `feat: enhance candidate selection phrase parsing`
 
 ## 当前限制
 
-- OCR 当前只有 fallback 接口与编排骨架，尚未接入真实识别引擎
-- 向量字段已预留，但还未接入真实 embedding 生成
-- 候选人画像抽取当前仍是规则式实现，不是 LLM enrichment
-- Search 当前已有 ES 查询与证据召回，但 ranking、query rewrite、vector/hybrid retrieval 仍未完善
-- Router 当前仍以规则式判断 `SEARCH` / `FILTER_REFINE` / `COMPARE` / `INTERVIEW` 为主
-- comparison 与 interview 当前是规则式组装，不是基于 LLM 深度生成
-- 当前 token 事件是基于 summary 分片的伪流式输出，不是底层模型的原生 token streaming
-- SSE 当前使用 `SseEmitter`，尚未迁移到 WebFlux
+- 候选人画像抽取仍然是规则式，不是 LLM enrichment
+- 搜索虽已具备 ES + embedding + rerank 基础，但还没有真正的 hybrid retrieval 融合策略
+- Chat token 事件仍然是 summary 分片，不是底层模型原生 streaming
+- Router 仍以规则式判断为主
+- compare / interview 仍然主要依赖规则组装，不是深度模型生成
 
-## 下一步
+## 下一步建议
 
-建议下一阶段优先从以下方向中选择其一：
+当前最值得优先做的是：
 
-- 升级当前 search / router，让模型更深度参与 query 理解、refinement 解析和候选人选择
-- 为 comparison / interview 增加更稳定的前端展示 payload 与引用协议
-- 将当前 SSE 从 summary 分片流升级为真正的模型 token 流
-- 继续增强检索质量，包括 rerank、query rewrite、vector/hybrid retrieval
+- 收口文档与开发计划
+- 再进入 hybrid retrieval
+- 然后补更稳的 query understanding / router intelligence
+
+不建议现在继续横向加新模块。
