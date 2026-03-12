@@ -9,6 +9,9 @@ import static org.mockito.Mockito.when;
 import com.recruit.agent.agent.orchestrator.AgentOrchestratorService;
 import com.recruit.agent.agent.orchestrator.dto.AgentExecuteResponse;
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
+import com.recruit.agent.comparison.vo.CandidateComparisonEvidenceVO;
+import com.recruit.agent.comparison.vo.CandidateComparisonItemVO;
+import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
 import com.recruit.agent.chat.dto.ChatRequest;
 import com.recruit.agent.chat.dto.ChatResponse;
 import com.recruit.agent.chat.dto.ChatStreamEvent;
@@ -76,5 +79,56 @@ class ChatApplicationServiceImplTest {
         assertEquals("done", events.get(events.size() - 1).getEvent());
         assertTrue(events.stream().anyMatch(event -> "token".equals(event.getEvent())));
         assertFalse(response.getSummary().isBlank());
+    }
+
+    @Test
+    void shouldBuildComparisonPayloadAndEvents() {
+        AgentOrchestratorService orchestratorService = org.mockito.Mockito.mock(AgentOrchestratorService.class);
+        ChatApplicationServiceImpl service = new ChatApplicationServiceImpl(orchestratorService);
+
+        AgentRouteDecision decision = new AgentRouteDecision();
+        decision.setScene(ChatScene.COMPARE);
+        decision.setToolName("compareCandidatesTool");
+
+        CandidateComparisonEvidenceVO evidence = new CandidateComparisonEvidenceVO();
+        evidence.setSection("project");
+        evidence.setPage(1);
+        evidence.setContent("负责推荐系统召回优化");
+
+        CandidateComparisonItemVO candidate = new CandidateComparisonItemVO();
+        candidate.setCandidateId("candidate-1");
+        candidate.setCandidateNo("C-001");
+        candidate.setFullName("张三");
+        candidate.setHighlights(List.of("技术栈覆盖: Java, Elasticsearch"));
+        candidate.setRiskPoints(List.of("存在外包/驻场标签"));
+        candidate.setEvidenceList(List.of(evidence));
+
+        CandidateComparisonResponse comparisonResponse = new CandidateComparisonResponse();
+        comparisonResponse.setTargetQuery("推荐系统");
+        comparisonResponse.setCandidates(List.of(candidate));
+        comparisonResponse.setSummary("张三在推荐系统相关背景上更突出。");
+
+        AgentExecuteResponse executeResponse = new AgentExecuteResponse();
+        executeResponse.setSessionNo("session-2");
+        executeResponse.setRouteDecision(decision);
+        executeResponse.setComparisonResponse(comparisonResponse);
+        executeResponse.setSummary("张三在推荐系统相关背景上更突出。");
+
+        when(orchestratorService.execute(any())).thenReturn(executeResponse);
+
+        ChatRequest request = new ChatRequest();
+        request.setSessionNo("session-2");
+        request.setUserId("user-1");
+        request.setMessage("对比一下这两个人");
+
+        ChatResponse response = service.chat(request);
+        List<ChatStreamEvent> events = service.stream(request);
+
+        assertEquals(ChatScene.COMPARE, response.getScene());
+        assertEquals("推荐系统", response.getComparison().getTargetQuery());
+        assertEquals("comparison", events.get(4).getEvent());
+        assertEquals("state_update", events.get(5).getEvent());
+        assertFalse(events.stream().anyMatch(event -> "citation".equals(event.getEvent())));
+        assertTrue(events.stream().anyMatch(event -> "token".equals(event.getEvent())));
     }
 }

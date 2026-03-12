@@ -26,4 +26,6 @@ public class ChatResponse {
     private CandidateSearchResponse searchResponse;
 
     private CandidateComparisonResponse comparisonResponse;
+
+    private ChatComparisonPayload comparison;
 }

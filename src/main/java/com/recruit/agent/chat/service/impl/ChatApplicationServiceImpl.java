@@ -3,6 +3,9 @@ package com.recruit.agent.chat.service.impl;
 import com.recruit.agent.agent.orchestrator.AgentOrchestratorService;
 import com.recruit.agent.agent.orchestrator.dto.AgentExecuteRequest;
 import com.recruit.agent.agent.orchestrator.dto.AgentExecuteResponse;
+import com.recruit.agent.chat.dto.ChatComparisonCandidatePayload;
+import com.recruit.agent.chat.dto.ChatComparisonEvidencePayload;
+import com.recruit.agent.chat.dto.ChatComparisonPayload;
 import com.recruit.agent.chat.dto.ChatCitationPayload;
 import com.recruit.agent.chat.dto.ChatRequest;
 import com.recruit.agent.chat.dto.ChatResponse;
@@ -14,6 +17,9 @@ import com.recruit.agent.chat.dto.ChatTokenPayload;
 import com.recruit.agent.chat.dto.ChatToolCallPayload;
 import com.recruit.agent.chat.service.ChatApplicationService;
 import com.recruit.agent.chat.model.ChatScene;
+import com.recruit.agent.comparison.vo.CandidateComparisonEvidenceVO;
+import com.recruit.agent.comparison.vo.CandidateComparisonItemVO;
+import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
 import java.util.ArrayList;
@@ -47,6 +53,9 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
         events.add(event("router_decision", toRouterDecisionPayload(executeResponse)));
         events.add(event("tool_call", toToolCallPayload(executeResponse)));
         events.add(event("tool_result", resolveToolResult(executeResponse)));
+        if (executeResponse.getRouteDecision().getScene() == ChatScene.COMPARE) {
+            events.add(event("comparison", toComparisonPayload(executeResponse.getComparisonResponse())));
+        }
         events.add(event("state_update", toStateUpdatePayload(executeResponse)));
         if (executeResponse.getRouteDecision().getScene() != ChatScene.COMPARE) {
             events.addAll(toCitationEvents(executeResponse));
@@ -72,6 +81,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
         response.setSummary(executeResponse.getSummary());
         response.setSearchResponse(executeResponse.getSearchResponse());
         response.setComparisonResponse(executeResponse.getComparisonResponse());
+        response.setComparison(toComparisonPayload(executeResponse.getComparisonResponse()));
         return response;
     }
 
@@ -107,6 +117,16 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     private ChatStateUpdatePayload toStateUpdatePayload(AgentExecuteResponse executeResponse) {
         ChatStateUpdatePayload payload = new ChatStateUpdatePayload();
         payload.setScene(executeResponse.getRouteDecision().getScene());
+        if (executeResponse.getRouteDecision().getScene() == ChatScene.COMPARE) {
+            payload.setCurrentQuery(executeResponse.getComparisonResponse() == null ? null : executeResponse.getComparisonResponse().getTargetQuery());
+            payload.setLastCandidateIds(executeResponse.getComparisonResponse() == null || executeResponse.getComparisonResponse().getCandidates() == null
+                ? List.of()
+                : executeResponse.getComparisonResponse().getCandidates().stream()
+                    .map(CandidateComparisonItemVO::getCandidateId)
+                    .toList());
+            return payload;
+        }
+
         payload.setCurrentQuery(executeResponse.getSearchResponse() == null ? null : executeResponse.getSearchResponse().getQuery());
         payload.setLastCandidateIds(executeResponse.getSearchResponse() == null || executeResponse.getSearchResponse().getCandidates() == null
             ? List.of()
@@ -144,6 +164,51 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
             events.add(event("citation", payload));
         }
         return events;
+    }
+
+    private ChatComparisonPayload toComparisonPayload(CandidateComparisonResponse comparisonResponse) {
+        if (comparisonResponse == null) {
+            return null;
+        }
+
+        ChatComparisonPayload payload = new ChatComparisonPayload();
+        payload.setTargetQuery(comparisonResponse.getTargetQuery());
+        payload.setSummary(comparisonResponse.getSummary());
+        payload.setCandidates(comparisonResponse.getCandidates() == null
+            ? List.of()
+            : comparisonResponse.getCandidates().stream()
+                .map(this::toComparisonCandidatePayload)
+                .toList());
+        return payload;
+    }
+
+    private ChatComparisonCandidatePayload toComparisonCandidatePayload(CandidateComparisonItemVO candidate) {
+        ChatComparisonCandidatePayload payload = new ChatComparisonCandidatePayload();
+        payload.setCandidateId(candidate.getCandidateId());
+        payload.setCandidateNo(candidate.getCandidateNo());
+        payload.setFullName(candidate.getFullName());
+        payload.setHighestDegree(candidate.getHighestDegree());
+        payload.setSchoolTier(candidate.getSchoolTier());
+        payload.setTotalYearsOfExperience(candidate.getTotalYearsOfExperience());
+        payload.setTechnicalSkills(candidate.getTechnicalSkills());
+        payload.setBigTech(candidate.getBigTech());
+        payload.setOutsourcing(candidate.getOutsourcing());
+        payload.setHighlights(candidate.getHighlights());
+        payload.setRiskPoints(candidate.getRiskPoints());
+        payload.setEvidenceList(candidate.getEvidenceList() == null
+            ? List.of()
+            : candidate.getEvidenceList().stream()
+                .map(this::toComparisonEvidencePayload)
+                .toList());
+        return payload;
+    }
+
+    private ChatComparisonEvidencePayload toComparisonEvidencePayload(CandidateComparisonEvidenceVO evidence) {
+        ChatComparisonEvidencePayload payload = new ChatComparisonEvidencePayload();
+        payload.setSection(evidence.getSection());
+        payload.setPage(evidence.getPage());
+        payload.setContent(evidence.getContent());
+        return payload;
     }
 
     private ChatCitationPayload.ChatCitationSnippet toCitationSnippet(CandidateSearchEvidenceVO evidence) {

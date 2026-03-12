@@ -1,4 +1,4 @@
-package com.recruit.agent.comparison.vo;
+package com.recruit.agent.chat.dto;
 
 import java.util.List;
 import lombok.Getter;
@@ -6,16 +6,16 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * 候选人对比响应。
+ * compare 场景稳定输出载荷。
  */
 @Getter
 @Setter
 @NoArgsConstructor
-public class CandidateComparisonResponse {
+public class ChatComparisonPayload {
 
     private String targetQuery;
 
-    private List<CandidateComparisonItemVO> candidates;
-
     private String summary;
+
+    private List<ChatComparisonCandidatePayload> candidates;
 }

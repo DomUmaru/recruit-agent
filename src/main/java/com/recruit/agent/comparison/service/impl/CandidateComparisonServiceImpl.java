@@ -40,6 +40,7 @@ public class CandidateComparisonServiceImpl implements CandidateComparisonServic
             .toList();
 
         CandidateComparisonResponse response = new CandidateComparisonResponse();
+        response.setTargetQuery(safeRequest.getTargetQuery());
         response.setCandidates(candidates);
         response.setSummary(buildSummary(candidates, safeRequest.getTargetQuery()));
         return response;
