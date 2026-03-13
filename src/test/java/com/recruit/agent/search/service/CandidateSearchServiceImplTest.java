@@ -223,4 +223,65 @@ class CandidateSearchServiceImplTest {
         assertTrue(response.getCandidates().get(0).getMatchScore() > 0.0d);
         verify(embeddingService).embedAll(List.of("java 搜索工程师"));
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldMergeProfileVectorRecallCandidatesWhenKeywordSearchMisses() throws Exception {
+        ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
+        com.recruit.agent.rag.embedding.EmbeddingService embeddingService = org.mockito.Mockito.mock(com.recruit.agent.rag.embedding.EmbeddingService.class);
+        when(embeddingService.isAvailable()).thenReturn(true);
+        when(embeddingService.embedAll(List.of("java 搜索平台"))).thenReturn(List.of(new float[]{0.1f, 0.2f}));
+
+        CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
+            elasticsearchOperations,
+            embeddingService,
+            new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
+            new DefaultCandidateMatchReasonService(),
+            new DefaultCandidateSearchRerankService(new UnavailableRerankService())
+        );
+
+        SearchHits<CandidateProfileIndex> emptyKeywordHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(emptyKeywordHits.getSearchHits()).thenReturn(List.of());
+        when(emptyKeywordHits.getTotalHits()).thenReturn(0L);
+
+        CandidateProfileIndex profileVectorCandidate = new CandidateProfileIndex();
+        profileVectorCandidate.setCandidateId("candidate-3");
+        profileVectorCandidate.setCandidateNo("C-003");
+        profileVectorCandidate.setFullName("王五");
+        profileVectorCandidate.setProfileSummary("负责 Java 搜索平台与召回架构");
+        profileVectorCandidate.setTechnicalSkills(List.of("Java", "Elasticsearch"));
+
+        SearchHit<CandidateProfileIndex> profileVectorHit = org.mockito.Mockito.mock(SearchHit.class);
+        when(profileVectorHit.getContent()).thenReturn(profileVectorCandidate);
+        when(profileVectorHit.getScore()).thenReturn(1.9f);
+
+        SearchHits<CandidateProfileIndex> profileVectorHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(profileVectorHits.getSearchHits()).thenReturn(List.of(profileVectorHit));
+        when(profileVectorHits.getTotalHits()).thenReturn(1L);
+
+        SearchHits<ResumeChunk> emptyChunkVectorHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(emptyChunkVectorHits.getSearchHits()).thenReturn(List.of());
+
+        SearchHits<ResumeChunk> evidenceHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(evidenceHits.getSearchHits()).thenReturn(List.of());
+
+        when(elasticsearchOperations.search(any(Query.class), eq(CandidateProfileIndex.class)))
+            .thenReturn(emptyKeywordHits)
+            .thenReturn(profileVectorHits);
+        when(elasticsearchOperations.search(any(Query.class), eq(ResumeChunk.class)))
+            .thenReturn(emptyChunkVectorHits)
+            .thenReturn(evidenceHits);
+
+        CandidateSearchRequest request = new CandidateSearchRequest();
+        request.setQuery("java 搜索平台");
+        request.setLimit(10);
+        request.setEvidenceLimit(2);
+
+        CandidateSearchResponse response = service.search(request);
+
+        assertEquals(1, response.getTotal());
+        assertEquals("candidate-3", response.getCandidates().get(0).getCandidateId());
+        assertTrue(response.getCandidates().get(0).getMatchScore() > 0.0d);
+        verify(embeddingService).embedAll(List.of("java 搜索平台"));
+    }
 }

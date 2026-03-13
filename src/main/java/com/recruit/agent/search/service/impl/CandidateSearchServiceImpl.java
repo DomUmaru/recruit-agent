@@ -106,12 +106,13 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
             return keywordCandidates;
         }
 
-        List<CandidateSearchHit> vectorCandidates = loadVectorCandidates(queryEmbedding.get(), filter, scopeCandidateIds, limit);
-        if (vectorCandidates.isEmpty()) {
+        List<CandidateSearchHit> profileVectorCandidates = loadProfileVectorCandidates(queryEmbedding.get(), filter, scopeCandidateIds, limit);
+        List<CandidateSearchHit> chunkVectorCandidates = loadChunkVectorCandidates(queryEmbedding.get(), filter, scopeCandidateIds, limit);
+        if (profileVectorCandidates.isEmpty() && chunkVectorCandidates.isEmpty()) {
             return keywordCandidates;
         }
 
-        return fuseCandidates(keywordCandidates, vectorCandidates, limit);
+        return fuseCandidates(keywordCandidates, profileVectorCandidates, chunkVectorCandidates, limit);
     }
 
     private NativeQuery buildCandidateSearchQuery(String query,
@@ -292,10 +293,24 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
             .build();
     }
 
-    private List<CandidateSearchHit> loadVectorCandidates(float[] queryEmbedding,
-                                                          CandidateSearchFilter filter,
-                                                          List<String> scopeCandidateIds,
-                                                          int limit) {
+    private List<CandidateSearchHit> loadProfileVectorCandidates(float[] queryEmbedding,
+                                                                 CandidateSearchFilter filter,
+                                                                 List<String> scopeCandidateIds,
+                                                                 int limit) {
+        SearchHits<CandidateProfileIndex> profileVectorHits = elasticsearchOperations.search(
+            buildVectorProfileSearchQuery(queryEmbedding, filter, scopeCandidateIds, limit),
+            CandidateProfileIndex.class
+        );
+
+        return profileVectorHits.getSearchHits().stream()
+            .map(hit -> new CandidateSearchHit(hit.getContent(), resolveMatchScore(hit)))
+            .toList();
+    }
+
+    private List<CandidateSearchHit> loadChunkVectorCandidates(float[] queryEmbedding,
+                                                               CandidateSearchFilter filter,
+                                                               List<String> scopeCandidateIds,
+                                                               int limit) {
         SearchHits<ResumeChunk> vectorHits = elasticsearchOperations.search(
             buildVectorChunkSearchQuery(queryEmbedding, scopeCandidateIds, limit * VECTOR_CANDIDATE_LIMIT_MULTIPLIER),
             ResumeChunk.class
@@ -320,6 +335,31 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                 .thenComparing(hit -> safeText(hit.profile().getCandidateNo())))
             .limit(limit)
             .toList();
+    }
+
+    private org.springframework.data.elasticsearch.core.query.Query buildVectorProfileSearchQuery(float[] queryEmbedding,
+                                                                                                   CandidateSearchFilter filter,
+                                                                                                   List<String> scopeCandidateIds,
+                                                                                                   int limit) {
+        String baseQueryJson = buildCandidateFilterJson(filter, scopeCandidateIds);
+        String vectorJson = buildVectorJson(queryEmbedding);
+        String queryJson = """
+            {
+              "script_score": {
+                "query": %s,
+                "script": {
+                  "source": "cosineSimilarity(params.queryVector, 'embedding') + 1.0",
+                  "params": {
+                    "queryVector": %s
+                  }
+                }
+              }
+            }
+            """.formatted(baseQueryJson, vectorJson);
+
+        StringQuery query = new StringQuery(queryJson);
+        query.setPageable(PageRequest.of(0, limit));
+        return query;
     }
 
     private org.springframework.data.elasticsearch.core.query.Query buildVectorChunkSearchQuery(float[] queryEmbedding,
@@ -347,13 +387,22 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
     }
 
     private NativeQuery buildCandidateIdsQuery(List<String> candidateIds, CandidateSearchFilter filter) {
+        return new NativeQueryBuilder()
+            .withQuery(Query.of(q -> q.bool(b -> b.filter(buildCandidateFilters(filter, candidateIds)))))
+            .withPageable(PageRequest.of(0, Math.max(candidateIds.size(), 1)))
+            .build();
+    }
+
+    private List<Query> buildCandidateFilters(CandidateSearchFilter filter, List<String> candidateIds) {
         List<Query> filters = new ArrayList<>();
-        filters.add(Query.of(q -> q.terms(t -> t
-            .field("candidateId")
-            .terms(values -> values.value(candidateIds.stream()
-                .filter(Objects::nonNull)
-                .map(FieldValue::of)
-                .toList())))));
+        if (candidateIds != null && !candidateIds.isEmpty()) {
+            filters.add(Query.of(q -> q.terms(t -> t
+                .field("candidateId")
+                .terms(values -> values.value(candidateIds.stream()
+                    .filter(Objects::nonNull)
+                    .map(FieldValue::of)
+                    .toList())))));
+        }
 
         if (filter.getHighestDegrees() != null && !filter.getHighestDegrees().isEmpty()) {
             filters.add(Query.of(q -> q.terms(t -> t
@@ -397,11 +446,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                 .field("outsourcing")
                 .value(FieldValue.of(filter.getOutsourcing())))));
         }
-
-        return new NativeQueryBuilder()
-            .withQuery(Query.of(q -> q.bool(b -> b.filter(filters))))
-            .withPageable(PageRequest.of(0, Math.max(candidateIds.size(), 1)))
-            .build();
+        return filters;
     }
 
     private Map<String, Double> aggregateCandidateVectorScores(SearchHits<ResumeChunk> vectorHits) {
@@ -421,12 +466,14 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
     }
 
     private List<CandidateSearchHit> fuseCandidates(List<CandidateSearchHit> keywordCandidates,
-                                                    List<CandidateSearchHit> vectorCandidates,
+                                                    List<CandidateSearchHit> profileVectorCandidates,
+                                                    List<CandidateSearchHit> chunkVectorCandidates,
                                                     int limit) {
         Map<String, CandidateFusionState> states = new LinkedHashMap<>();
 
         applyRrf(states, keywordCandidates);
-        applyRrf(states, vectorCandidates);
+        applyRrf(states, profileVectorCandidates);
+        applyRrf(states, chunkVectorCandidates);
 
         return states.values().stream()
             .sorted(Comparator.comparing(CandidateFusionState::fusedScore).reversed()
@@ -522,6 +569,112 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
               }
             }
             """.formatted(idsJson);
+    }
+
+    private String buildCandidateFilterJson(CandidateSearchFilter filter, List<String> scopeCandidateIds) {
+        List<String> clauses = new ArrayList<>();
+        if (scopeCandidateIds != null && !scopeCandidateIds.isEmpty()) {
+            String idsJson = scopeCandidateIds.stream()
+                .filter(Objects::nonNull)
+                .map(this::toJsonString)
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
+            clauses.add("""
+                {
+                  "terms": {
+                    "candidateId": [%s]
+                  }
+                }
+                """.formatted(idsJson));
+        }
+        if (filter.getHighestDegrees() != null && !filter.getHighestDegrees().isEmpty()) {
+            String values = filter.getHighestDegrees().stream()
+                .map(Enum::name)
+                .map(this::toJsonString)
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
+            clauses.add("""
+                {
+                  "terms": {
+                    "highestDegree": [%s]
+                  }
+                }
+                """.formatted(values));
+        }
+        if (filter.getSchoolTiers() != null && !filter.getSchoolTiers().isEmpty()) {
+            String values = filter.getSchoolTiers().stream()
+                .map(Enum::name)
+                .map(this::toJsonString)
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
+            clauses.add("""
+                {
+                  "terms": {
+                    "schoolTier": [%s]
+                  }
+                }
+                """.formatted(values));
+        }
+        if (filter.getMinYearsOfExperience() != null) {
+            clauses.add("""
+                {
+                  "range": {
+                    "totalYearsOfExperience": {
+                      "gte": %s
+                    }
+                  }
+                }
+                """.formatted(filter.getMinYearsOfExperience()));
+        }
+        if (filter.getTechnicalSkills() != null && !filter.getTechnicalSkills().isEmpty()) {
+            filter.getTechnicalSkills().stream()
+                .map(this::toJsonString)
+                .map(value -> """
+                    {
+                      "term": {
+                        "technicalSkills": %s
+                      }
+                    }
+                    """.formatted(value))
+                .forEach(clauses::add);
+        }
+        if (filter.getCurrentCity() != null && !filter.getCurrentCity().isBlank()) {
+            clauses.add("""
+                {
+                  "term": {
+                    "currentCity": %s
+                  }
+                }
+                """.formatted(toJsonString(filter.getCurrentCity())));
+        }
+        if (filter.getBigTech() != null) {
+            clauses.add("""
+                {
+                  "term": {
+                    "bigTech": %s
+                  }
+                }
+                """.formatted(filter.getBigTech()));
+        }
+        if (filter.getOutsourcing() != null) {
+            clauses.add("""
+                {
+                  "term": {
+                    "outsourcing": %s
+                  }
+                }
+                """.formatted(filter.getOutsourcing()));
+        }
+        if (clauses.isEmpty()) {
+            return "{\"match_all\":{}}";
+        }
+        return """
+            {
+              "bool": {
+                "filter": [%s]
+              }
+            }
+            """.formatted(String.join(",", clauses));
     }
 
     private String buildVectorJson(float[] queryEmbedding) {
