@@ -76,6 +76,7 @@ public class RuleBasedResumeSplitter implements ResumeChunkingService {
     private static final Pattern DETAIL_START = Pattern.compile(
         "^(?:负责|参与|使用|基于|通过|实现|设计|优化|搭建|完成|编写|维护|熟悉|掌握|了解|主导|协助|推动|支持|成果|亮点|项目描述|技术栈|工作内容|职责)[:：]?.*"
     );
+    private static final Pattern ENDS_WITH_SENTENCE = Pattern.compile(".*[。；;]$");
     private static final Pattern LEADING_NOISE = Pattern.compile("^[\\p{Punct}\\p{So}\\u3000-\\u303F\\uF000-\\uF8FF\\s]+");
     private static final Pattern TRAILING_TITLE_PUNCT = Pattern.compile("[:：|丨]+$");
 
@@ -279,7 +280,7 @@ public class RuleBasedResumeSplitter implements ResumeChunkingService {
         if (!isInitialSubSectionTitle(line)) {
             return false;
         }
-        return currentParent.lines().size() >= 2 && isLikelyStandaloneLine(line);
+        return currentParent.lines().size() <= 1 && isLikelyStandaloneLine(line);
     }
 
     private boolean isInitialSubSectionTitle(String line) {
@@ -292,7 +293,10 @@ public class RuleBasedResumeSplitter implements ResumeChunkingService {
         if (DETAIL_START.matcher(line).matches()) {
             return false;
         }
-        return line.length() <= 48 && isLikelyStandaloneLine(line);
+        if (ENDS_WITH_SENTENCE.matcher(line).matches()) {
+            return false;
+        }
+        return line.length() <= 40 && isLikelyStandaloneLine(line);
     }
 
     private boolean isLikelyStandaloneLine(String line) {
@@ -450,7 +454,9 @@ public class RuleBasedResumeSplitter implements ResumeChunkingService {
     private String normalizeLine(String rawLine) {
         String normalized = rawLine == null ? "" : rawLine.replace('\u00A0', ' ').trim();
         normalized = normalized.replace("Â·", "·");
+        normalized = normalized.replace("Â", "");
         normalized = normalized.replace("•", "·");
+        normalized = normalized.replace("●", "·");
         normalized = normalized.replaceAll("[\\uF000-\\uF8FF]", "");
         normalized = normalized.replaceAll("\\s+", " ").trim();
         normalized = LEADING_NOISE.matcher(normalized).replaceFirst("").trim();
