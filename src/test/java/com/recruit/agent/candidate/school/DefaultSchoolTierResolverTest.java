@@ -16,6 +16,7 @@ class DefaultSchoolTierResolverTest {
     void shouldResolveTopTierSchools() {
         assertEquals(SchoolTier.C9, resolver.resolve("上海交通大学", DegreeLevel.BACHELOR));
         assertEquals(SchoolTier.PROJECT_211, resolver.resolve("北京邮电大学", DegreeLevel.BACHELOR));
+        assertEquals(SchoolTier.PROJECT_211, resolver.resolve("西南大学", DegreeLevel.BACHELOR));
         assertEquals(SchoolTier.DOUBLE_FIRST_CLASS, resolver.resolve("南方科技大学", DegreeLevel.BACHELOR));
     }
 
