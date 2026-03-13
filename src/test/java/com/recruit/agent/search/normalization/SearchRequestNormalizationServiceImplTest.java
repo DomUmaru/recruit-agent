@@ -7,6 +7,8 @@ import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
+import com.recruit.agent.search.parser.SearchIntentParseResult;
+import com.recruit.agent.search.parser.SearchIntentParser;
 import com.recruit.agent.search.normalization.impl.SearchRequestNormalizationServiceImpl;
 import com.recruit.agent.search.parser.impl.RuleBasedNaturalLanguageSearchFilterParser;
 import java.math.BigDecimal;
@@ -90,5 +92,53 @@ class SearchRequestNormalizationServiceImplTest {
         assertEquals(Boolean.FALSE, prepared.getFilter().getOutsourcing());
         assertEquals(10, prepared.getLimit());
         assertEquals(3, prepared.getEvidenceLimit());
+    }
+
+    @Test
+    void shouldPreferLlmResidualQueryAndSupplementParsedFilter() {
+        SearchIntentParseResult llmResult = new SearchIntentParseResult();
+        CandidateSearchFilter llmFilter = new CandidateSearchFilter();
+        llmFilter.setHighestDegrees(List.of(DegreeLevel.MASTER));
+        llmFilter.setSchoolTiers(List.of(SchoolTier.PROJECT_985));
+        llmFilter.setCurrentCity("上海");
+        llmResult.setResidualQuery("推荐系统");
+        llmResult.setFilter(llmFilter);
+
+        SearchRequestNormalizationServiceImpl service = new SearchRequestNormalizationServiceImpl(
+            new RuleBasedNaturalLanguageSearchFilterParser(),
+            new StubSearchIntentParser(true, llmResult)
+        );
+
+        CandidateSearchRequest request = new CandidateSearchRequest();
+        request.setQuery("上海 985 硕士 5年 Java 推荐系统");
+
+        PreparedCandidateSearchRequest prepared = service.prepare(request);
+
+        assertEquals("推荐系统", prepared.getQuery());
+        assertIterableEquals(List.of(DegreeLevel.MASTER, DegreeLevel.BACHELOR), prepared.getFilter().getHighestDegrees());
+        assertIterableEquals(List.of(SchoolTier.PROJECT_985), prepared.getFilter().getSchoolTiers());
+        assertEquals(new BigDecimal("5"), prepared.getFilter().getMinYearsOfExperience());
+        assertIterableEquals(List.of("Java"), prepared.getFilter().getTechnicalSkills());
+        assertEquals("上海", prepared.getFilter().getCurrentCity());
+    }
+
+    private static class StubSearchIntentParser implements SearchIntentParser {
+        private final boolean available;
+        private final SearchIntentParseResult result;
+
+        private StubSearchIntentParser(boolean available, SearchIntentParseResult result) {
+            this.available = available;
+            this.result = result;
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return available;
+        }
+
+        @Override
+        public SearchIntentParseResult parse(String text) {
+            return result;
+        }
     }
 }

@@ -5,9 +5,14 @@ import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.normalization.PreparedCandidateSearchRequest;
 import com.recruit.agent.search.normalization.SearchRequestNormalizationService;
 import com.recruit.agent.search.parser.NaturalLanguageSearchFilterParser;
+import com.recruit.agent.search.parser.SearchIntentParseResult;
+import com.recruit.agent.search.parser.SearchIntentParser;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -16,13 +21,23 @@ import org.springframework.stereotype.Service;
 @Service
 public class SearchRequestNormalizationServiceImpl implements SearchRequestNormalizationService {
 
+    private static final Logger log = LoggerFactory.getLogger(SearchRequestNormalizationServiceImpl.class);
+
     private static final int DEFAULT_LIMIT = 10;
     private static final int DEFAULT_EVIDENCE_LIMIT = 3;
 
     private final NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser;
+    private final SearchIntentParser searchIntentParser;
 
     public SearchRequestNormalizationServiceImpl(NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser) {
+        this(naturalLanguageSearchFilterParser, null);
+    }
+
+    @Autowired
+    public SearchRequestNormalizationServiceImpl(NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser,
+                                                 SearchIntentParser searchIntentParser) {
         this.naturalLanguageSearchFilterParser = naturalLanguageSearchFilterParser;
+        this.searchIntentParser = searchIntentParser;
     }
 
     @Override
@@ -31,15 +46,40 @@ public class SearchRequestNormalizationServiceImpl implements SearchRequestNorma
         String rawQuery = safeText(safeRequest.getQuery());
         CandidateSearchFilter explicitFilter = safeRequest.getFilter() == null ? new CandidateSearchFilter() : safeRequest.getFilter();
         CandidateSearchFilter parsedFilter = naturalLanguageSearchFilterParser.parse(rawQuery);
+        SearchIntentParseResult llmResult = parseWithLlm(rawQuery);
+        CandidateSearchFilter mergedParsedFilter = mergeFilter(parsedFilter, llmResult.getFilter());
 
         PreparedCandidateSearchRequest prepared = new PreparedCandidateSearchRequest();
         prepared.setRawQuery(rawQuery);
-        prepared.setQuery(safeText(naturalLanguageSearchFilterParser.stripFilterTerms(rawQuery)));
-        prepared.setFilter(mergeFilter(explicitFilter, parsedFilter));
+        prepared.setQuery(resolveResidualQuery(rawQuery, llmResult));
+        prepared.setFilter(mergeFilter(explicitFilter, mergedParsedFilter));
         prepared.setScopeCandidateIds(safeRequest.getScopeCandidateIds());
         prepared.setLimit(normalizeCandidateLimit(safeRequest.getLimit()));
         prepared.setEvidenceLimit(normalizeEvidenceLimit(safeRequest.getEvidenceLimit()));
         return prepared;
+    }
+
+    private SearchIntentParseResult parseWithLlm(String rawQuery) {
+        if (searchIntentParser == null || !searchIntentParser.isAvailable()) {
+            log.info("Search intent parser fallback: llm parser unavailable.");
+            return new SearchIntentParseResult();
+        }
+        SearchIntentParseResult result = searchIntentParser.parse(rawQuery);
+        log.info("Search intent parser used LLM. residualQuery='{}', filterPresent={}",
+            result == null ? null : result.getResidualQuery(),
+            result != null && result.getFilter() != null);
+        return result == null ? new SearchIntentParseResult() : result;
+    }
+
+    private String resolveResidualQuery(String rawQuery, SearchIntentParseResult llmResult) {
+        String llmResidual = llmResult == null ? "" : safeText(llmResult.getResidualQuery());
+        if (!llmResidual.isBlank()) {
+            log.info("Search normalization uses LLM residual query='{}'.", llmResidual);
+            return llmResidual;
+        }
+        String fallbackResidual = safeText(naturalLanguageSearchFilterParser.stripFilterTerms(rawQuery));
+        log.info("Search normalization falls back to rule residual query='{}'.", fallbackResidual);
+        return fallbackResidual;
     }
 
     private CandidateSearchFilter mergeFilter(CandidateSearchFilter explicitFilter, CandidateSearchFilter parsedFilter) {

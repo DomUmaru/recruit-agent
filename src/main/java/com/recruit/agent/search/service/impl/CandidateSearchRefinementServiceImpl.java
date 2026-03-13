@@ -5,6 +5,8 @@ import com.recruit.agent.search.dto.CandidateSearchRefineRequest;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.dto.FilterMergeMode;
 import com.recruit.agent.search.parser.NaturalLanguageSearchFilterParser;
+import com.recruit.agent.search.parser.SearchIntentParseResult;
+import com.recruit.agent.search.parser.SearchIntentParser;
 import com.recruit.agent.search.service.CandidateSearchRefinementService;
 import com.recruit.agent.search.service.CandidateSearchService;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
@@ -13,6 +15,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -21,13 +26,24 @@ import org.springframework.stereotype.Service;
 @Service
 public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefinementService {
 
+    private static final Logger log = LoggerFactory.getLogger(CandidateSearchRefinementServiceImpl.class);
+
     private final CandidateSearchService candidateSearchService;
     private final NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser;
+    private final SearchIntentParser searchIntentParser;
 
     public CandidateSearchRefinementServiceImpl(CandidateSearchService candidateSearchService,
                                                 NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser) {
+        this(candidateSearchService, naturalLanguageSearchFilterParser, null);
+    }
+
+    @Autowired
+    public CandidateSearchRefinementServiceImpl(CandidateSearchService candidateSearchService,
+                                                NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser,
+                                                SearchIntentParser searchIntentParser) {
         this.candidateSearchService = candidateSearchService;
         this.naturalLanguageSearchFilterParser = naturalLanguageSearchFilterParser;
+        this.searchIntentParser = searchIntentParser;
     }
 
     @Override
@@ -36,15 +52,16 @@ public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefi
         CandidateSearchRequest baseRequest = safeRequest.getBaseRequest() == null ? new CandidateSearchRequest() : safeRequest.getBaseRequest();
         CandidateSearchFilter baseFilter = copyFilter(baseRequest.getFilter());
         CandidateSearchFilter parsedRefinementFilter = naturalLanguageSearchFilterParser.parse(safeRequest.getRefinementQuery());
+        SearchIntentParseResult llmResult = parseWithLlm(safeRequest.getRefinementQuery());
         CandidateSearchFilter refinementFilter = mergeFilter(
             safeFilter(safeRequest.getRefinementFilter()),
-            safeFilter(parsedRefinementFilter),
+            mergeFilter(safeFilter(parsedRefinementFilter), safeFilter(llmResult.getFilter()), FilterMergeMode.APPEND),
             FilterMergeMode.APPEND
         );
         FilterMergeMode mergeMode = safeRequest.getMergeMode() == null ? FilterMergeMode.APPEND : safeRequest.getMergeMode();
 
         CandidateSearchRequest merged = new CandidateSearchRequest();
-        merged.setQuery(mergeQuery(baseRequest.getQuery(), safeRequest.getRefinementQuery(), mergeMode));
+        merged.setQuery(mergeQuery(baseRequest.getQuery(), resolveRefinementResidualQuery(safeRequest.getRefinementQuery(), llmResult), mergeMode));
         merged.setFilter(mergeFilter(baseFilter, refinementFilter, mergeMode));
         merged.setScopeCandidateIds(resolveScope(baseRequest.getScopeCandidateIds(), safeRequest.getScopeCandidateIds()));
         merged.setLimit(baseRequest.getLimit());
@@ -59,7 +76,7 @@ public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefi
 
     private String mergeQuery(String baseQuery, String refinementQuery, FilterMergeMode mergeMode) {
         String normalizedBase = safeText(baseQuery).trim();
-        String normalizedRefinement = safeText(naturalLanguageSearchFilterParser.stripFilterTerms(refinementQuery)).trim();
+        String normalizedRefinement = safeText(refinementQuery).trim();
 
         if (normalizedRefinement.isBlank()) {
             return normalizedBase;
@@ -68,6 +85,29 @@ public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefi
             return normalizedRefinement;
         }
         return normalizedBase + " " + normalizedRefinement;
+    }
+
+    private SearchIntentParseResult parseWithLlm(String text) {
+        if (searchIntentParser == null || !searchIntentParser.isAvailable()) {
+            log.info("Refinement parser fallback: llm parser unavailable.");
+            return new SearchIntentParseResult();
+        }
+        SearchIntentParseResult result = searchIntentParser.parse(text);
+        log.info("Refinement parser used LLM. residualQuery='{}', filterPresent={}",
+            result == null ? null : result.getResidualQuery(),
+            result != null && result.getFilter() != null);
+        return result == null ? new SearchIntentParseResult() : result;
+    }
+
+    private String resolveRefinementResidualQuery(String refinementQuery, SearchIntentParseResult llmResult) {
+        String llmResidual = llmResult == null ? "" : safeText(llmResult.getResidualQuery());
+        if (!llmResidual.isBlank()) {
+            log.info("Refinement uses LLM residual query='{}'.", llmResidual);
+            return llmResidual;
+        }
+        String fallbackResidual = safeText(naturalLanguageSearchFilterParser.stripFilterTerms(refinementQuery));
+        log.info("Refinement falls back to rule residual query='{}'.", fallbackResidual);
+        return fallbackResidual;
     }
 
     private CandidateSearchFilter mergeFilter(CandidateSearchFilter baseFilter,

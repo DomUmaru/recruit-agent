@@ -12,6 +12,8 @@ import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRefineRequest;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
 import com.recruit.agent.search.dto.FilterMergeMode;
+import com.recruit.agent.search.parser.SearchIntentParseResult;
+import com.recruit.agent.search.parser.SearchIntentParser;
 import com.recruit.agent.search.parser.impl.RuleBasedNaturalLanguageSearchFilterParser;
 import com.recruit.agent.search.service.impl.CandidateSearchRefinementServiceImpl;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
@@ -129,5 +131,56 @@ class CandidateSearchRefinementServiceImplTest {
         assertIterableEquals(List.of(SchoolTier.PROJECT_985), secondMerged.getFilter().getSchoolTiers());
         assertIterableEquals(List.of("Java", "Elasticsearch"), secondMerged.getFilter().getTechnicalSkills());
         assertEquals("上海", secondMerged.getFilter().getCurrentCity());
+    }
+
+    @Test
+    void shouldUseLlmResidualQueryDuringRefinementWhenAvailable() {
+        CandidateSearchService candidateSearchService = org.mockito.Mockito.mock(CandidateSearchService.class);
+        SearchIntentParseResult llmResult = new SearchIntentParseResult();
+        CandidateSearchFilter llmFilter = new CandidateSearchFilter();
+        llmFilter.setCurrentCity("上海");
+        llmFilter.setTechnicalSkills(List.of("Elasticsearch"));
+        llmResult.setResidualQuery("推荐系统");
+        llmResult.setFilter(llmFilter);
+
+        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(
+            candidateSearchService,
+            new RuleBasedNaturalLanguageSearchFilterParser(),
+            new StubSearchIntentParser(true, llmResult)
+        );
+
+        CandidateSearchRequest baseRequest = new CandidateSearchRequest();
+        baseRequest.setQuery("Java");
+
+        CandidateSearchRefineRequest refineRequest = new CandidateSearchRefineRequest();
+        refineRequest.setBaseRequest(baseRequest);
+        refineRequest.setRefinementQuery("上海 Elasticsearch 推荐系统");
+        refineRequest.setMergeMode(FilterMergeMode.APPEND);
+
+        CandidateSearchRequest merged = service.merge(refineRequest);
+
+        assertEquals("Java 推荐系统", merged.getQuery());
+        assertIterableEquals(List.of("Elasticsearch"), merged.getFilter().getTechnicalSkills());
+        assertEquals("上海", merged.getFilter().getCurrentCity());
+    }
+
+    private static class StubSearchIntentParser implements SearchIntentParser {
+        private final boolean available;
+        private final SearchIntentParseResult result;
+
+        private StubSearchIntentParser(boolean available, SearchIntentParseResult result) {
+            this.available = available;
+            this.result = result;
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return available;
+        }
+
+        @Override
+        public SearchIntentParseResult parse(String text) {
+            return result;
+        }
     }
 }
