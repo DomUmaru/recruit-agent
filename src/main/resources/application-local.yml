@@ -1,13 +1,13 @@
 spring:
   ai:
     model:
-      chat: none
-    openai:
-      api-key: ${OPENAI_API_KEY:}
-      base-url: ${OPENAI_BASE_URL:}
+      chat: deepseek
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:${OPENAI_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
       chat:
         options:
-          model: ${OPENAI_CHAT_MODEL:}
+          model: ${DEEPSEEK_CHAT_MODEL:${OPENAI_CHAT_MODEL:deepseek-chat}}
   datasource:
     url: jdbc:mysql://localhost:${MYSQL_PORT:3307}/${MYSQL_DATABASE:recruit_agent}?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER:recruit}
@@ -58,6 +58,6 @@ app:
     connect-timeout-ms: 10000
     read-timeout-ms: 180000
   llm:
-    provider: none
+    provider: deepseek
   resume:
     upload-dir: data/uploads/resumes

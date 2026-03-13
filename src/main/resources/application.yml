@@ -4,10 +4,10 @@ spring:
   ai:
     model:
       chat: none
-    openai:
-      api-key: ${OPENAI_API_KEY:}
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:${OPENAI_API_KEY:}}
   datasource:
-    url: jdbc:mysql://localhost:3306/recruit_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3307/recruit_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
