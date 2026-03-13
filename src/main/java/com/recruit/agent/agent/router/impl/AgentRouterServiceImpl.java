@@ -1,20 +1,22 @@
 package com.recruit.agent.agent.router.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.recruit.agent.agent.router.AgentRouterService;
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
 import com.recruit.agent.agent.router.dto.AgentRoutingContext;
 import com.recruit.agent.chat.model.ChatScene;
+import com.recruit.agent.llm.LlmGenerationService;
+import com.recruit.agent.llm.UnavailableLlmGenerationService;
 import java.util.List;
 import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-/**
- * Agent 路由器。
- * 作用是把用户输入粗分到具体业务场景，而不是直接做搜索或对比。
- * 当前是规则式路由：根据关键词和会话历史在 SEARCH / FILTER_REFINE / COMPARE / INTERVIEW 中选择。
- */
 @Service
 public class AgentRouterServiceImpl implements AgentRouterService {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentRouterServiceImpl.class);
 
     private static final String SEARCH_TOOL_NAME = "searchCandidateByJDTool";
     private static final String REFINE_TOOL_NAME = "refineSearchFilterTool";
@@ -33,18 +35,73 @@ public class AgentRouterServiceImpl implements AgentRouterService {
         "面试", "面试题", "题目", "提问", "追问", "八股", "interview"
     );
 
+    private final LlmGenerationService llmGenerationService;
+    private final ObjectMapper objectMapper;
+
+    public AgentRouterServiceImpl() {
+        this(new UnavailableLlmGenerationService(), new ObjectMapper());
+    }
+
+    public AgentRouterServiceImpl(LlmGenerationService llmGenerationService, ObjectMapper objectMapper) {
+        this.llmGenerationService = llmGenerationService;
+        this.objectMapper = objectMapper;
+    }
+
     @Override
     public AgentRouteDecision route(AgentRoutingContext context) {
         AgentRoutingContext safeContext = context == null ? new AgentRoutingContext() : context;
-        String userInput = normalize(safeContext.getUserInput());
-        boolean hasHistory = hasHistory(safeContext);
+
+        AgentRouteDecision llmDecision = routeWithLlm(safeContext);
+        if (llmDecision != null) {
+            return llmDecision;
+        }
+        return routeWithRules(safeContext);
+    }
+
+    private AgentRouteDecision routeWithLlm(AgentRoutingContext context) {
+        if (!llmGenerationService.isAvailable() || !hasText(context.getUserInput())) {
+            return null;
+        }
+
+        try {
+            String response = llmGenerationService.generate(buildRouterSystemPrompt(), buildRouterUserPrompt(context));
+            if (!hasText(response)) {
+                return null;
+            }
+
+            LlmRouteOutput output = objectMapper.readValue(response, LlmRouteOutput.class);
+            ChatScene scene = parseScene(output.getScene());
+            if (scene == null) {
+                return null;
+            }
+
+            boolean historyRequired = requiresHistory(scene);
+            if (historyRequired && !hasHistory(context)) {
+                log.info("LLM router suggested scene={} but no reusable history exists. Falling back to rules.", scene);
+                return null;
+            }
+
+            AgentRouteDecision decision = new AgentRouteDecision();
+            decision.setScene(scene);
+            decision.setToolName(resolveToolName(scene));
+            decision.setHistoryRequired(historyRequired);
+            decision.setReason(hasText(output.getReason()) ? "llm-router: " + output.getReason().trim() : "llm-router");
+            log.info("Agent router selected scene={} via LLM.", scene);
+            return decision;
+        } catch (Exception exception) {
+            log.warn("LLM router failed. Falling back to rule-based routing.", exception);
+            return null;
+        }
+    }
+
+    private AgentRouteDecision routeWithRules(AgentRoutingContext context) {
+        String userInput = normalize(context.getUserInput());
+        boolean hasHistory = hasHistory(context);
         boolean refineIntent = hasHistory && isRefineIntent(userInput);
         boolean compareIntent = hasHistory && isCompareIntent(userInput);
         boolean interviewIntent = hasHistory && isInterviewIntent(userInput);
 
         AgentRouteDecision decision = new AgentRouteDecision();
-
-        // 面试题和对比都依赖上轮候选人范围，因此要求存在历史状态。
         if (interviewIntent) {
             decision.setScene(ChatScene.INTERVIEW);
             decision.setToolName(INTERVIEW_TOOL_NAME);
@@ -69,7 +126,6 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             return decision;
         }
 
-        // 默认兜底到 SEARCH，表示把当前输入当成一轮新的招聘搜索需求。
         decision.setScene(ChatScene.SEARCH);
         decision.setToolName(SEARCH_TOOL_NAME);
         decision.setHistoryRequired(false);
@@ -79,8 +135,78 @@ public class AgentRouterServiceImpl implements AgentRouterService {
         return decision;
     }
 
+    private boolean requiresHistory(ChatScene scene) {
+        return scene == ChatScene.FILTER_REFINE || scene == ChatScene.COMPARE || scene == ChatScene.INTERVIEW;
+    }
+
+    private String buildRouterSystemPrompt() {
+        return """
+            You are an intent router for a recruitment agent.
+            Classify the user message into exactly one scene:
+            - SEARCH: a new candidate search request
+            - FILTER_REFINE: narrowing or updating the previous search result set
+            - COMPARE: comparing candidates from prior results
+            - INTERVIEW: generating interview questions for candidates from prior results
+
+            Return JSON only:
+            {"scene":"SEARCH|FILTER_REFINE|COMPARE|INTERVIEW","reason":"short reason"}
+
+            Constraints:
+            - Do not invent candidates, filters, or tool parameters.
+            - If the user explicitly asks for comparison, return COMPARE.
+            - If the user explicitly asks for interview questions, return INTERVIEW.
+            - If the user narrows previous candidates, return FILTER_REFINE.
+            - Otherwise return SEARCH.
+            """;
+    }
+
+    private String buildRouterUserPrompt(AgentRoutingContext context) {
+        return """
+            User input:
+            %s
+
+            Current scene:
+            %s
+
+            Current query:
+            %s
+
+            Filters json:
+            %s
+
+            Last candidate ids json:
+            %s
+            """.formatted(
+            safeValue(context.getUserInput()),
+            context.getCurrentScene() == null ? "" : context.getCurrentScene().name(),
+            safeValue(context.getCurrentQuery()),
+            safeValue(context.getFiltersJson()),
+            safeValue(context.getLastCandidateIdsJson())
+        );
+    }
+
+    private ChatScene parseScene(String scene) {
+        if (!hasText(scene)) {
+            return null;
+        }
+        try {
+            return ChatScene.valueOf(scene.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private String resolveToolName(ChatScene scene) {
+        return switch (scene) {
+            case FILTER_REFINE -> REFINE_TOOL_NAME;
+            case COMPARE -> COMPARE_TOOL_NAME;
+            case INTERVIEW -> INTERVIEW_TOOL_NAME;
+            case SEARCH -> SEARCH_TOOL_NAME;
+            default -> SEARCH_TOOL_NAME;
+        };
+    }
+
     private boolean hasHistory(AgentRoutingContext context) {
-        // 这里的“历史”不是完整聊天记录，而是当前任务链继续执行所需的最小上下文。
         return context.getCurrentScene() != null
             || hasText(context.getCurrentQuery())
             || hasText(context.getFiltersJson())
@@ -88,24 +214,15 @@ public class AgentRouterServiceImpl implements AgentRouterService {
     }
 
     private boolean isRefineIntent(String userInput) {
-        if (userInput.isBlank()) {
-            return false;
-        }
-        return REFINE_KEYWORDS.stream().anyMatch(userInput::contains);
+        return hasText(userInput) && REFINE_KEYWORDS.stream().anyMatch(userInput::contains);
     }
 
     private boolean isCompareIntent(String userInput) {
-        if (userInput.isBlank()) {
-            return false;
-        }
-        return COMPARE_KEYWORDS.stream().anyMatch(userInput::contains);
+        return hasText(userInput) && COMPARE_KEYWORDS.stream().anyMatch(userInput::contains);
     }
 
     private boolean isInterviewIntent(String userInput) {
-        if (userInput.isBlank()) {
-            return false;
-        }
-        return INTERVIEW_KEYWORDS.stream().anyMatch(userInput::contains);
+        return hasText(userInput) && INTERVIEW_KEYWORDS.stream().anyMatch(userInput::contains);
     }
 
     private String normalize(String text) {
@@ -114,5 +231,30 @@ public class AgentRouterServiceImpl implements AgentRouterService {
 
     private boolean hasText(String text) {
         return text != null && !text.isBlank();
+    }
+
+    private String safeValue(String text) {
+        return text == null ? "" : text;
+    }
+
+    private static class LlmRouteOutput {
+        private String scene;
+        private String reason;
+
+        public String getScene() {
+            return scene;
+        }
+
+        public void setScene(String scene) {
+            this.scene = scene;
+        }
+
+        public String getReason() {
+            return reason;
+        }
+
+        public void setReason(String reason) {
+            this.reason = reason;
+        }
     }
 }
