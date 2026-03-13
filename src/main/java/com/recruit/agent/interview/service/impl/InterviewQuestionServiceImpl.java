@@ -6,6 +6,7 @@ import com.recruit.agent.interview.vo.CandidateInterviewQuestionVO;
 import com.recruit.agent.interview.vo.InterviewQuestionEvidenceVO;
 import com.recruit.agent.interview.vo.InterviewQuestionItemVO;
 import com.recruit.agent.interview.vo.InterviewQuestionResponse;
+import com.recruit.agent.llm.LlmGenerationService;
 import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
 import com.recruit.agent.rag.repository.CandidateProfileIndexRepository;
@@ -15,6 +16,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -23,13 +26,18 @@ import org.springframework.stereotype.Service;
 @Service
 public class InterviewQuestionServiceImpl implements InterviewQuestionService {
 
+    private static final Logger log = LoggerFactory.getLogger(InterviewQuestionServiceImpl.class);
+
     private final CandidateProfileIndexRepository candidateProfileIndexRepository;
     private final ResumeChunkRepository resumeChunkRepository;
+    private final LlmGenerationService llmGenerationService;
 
     public InterviewQuestionServiceImpl(CandidateProfileIndexRepository candidateProfileIndexRepository,
-                                        ResumeChunkRepository resumeChunkRepository) {
+                                        ResumeChunkRepository resumeChunkRepository,
+                                        LlmGenerationService llmGenerationService) {
         this.candidateProfileIndexRepository = candidateProfileIndexRepository;
         this.resumeChunkRepository = resumeChunkRepository;
+        this.llmGenerationService = llmGenerationService;
     }
 
     @Override
@@ -45,7 +53,7 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
         InterviewQuestionResponse response = new InterviewQuestionResponse();
         response.setTargetQuery(safeRequest.getTargetQuery());
         response.setCandidates(candidates);
-        response.setSummary(buildSummary(candidates, safeRequest.getTargetQuery()));
+        response.setSummary(buildSummaryWithLlm(candidates, safeRequest.getTargetQuery()));
         return response;
     }
 
@@ -121,7 +129,7 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
         if (targetQuery == null || targetQuery.isBlank()) {
             return "结合你的履历，哪一段经历最能说明你适合当前应聘岗位？请说明你的直接贡献和产出。";
         }
-        return "针对“" + targetQuery + "”这类需求，你过去最相关的一段经历是什么？请按背景、方案、结果展开说明。";
+        return "针对\"" + targetQuery + "\"这类需求，你过去最相关的一段经历是什么？请按背景、方案、结果展开说明。";
     }
 
     private String buildExperienceQuestion(BigDecimal years) {
@@ -159,7 +167,48 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
         }
         String queryPart = targetQuery == null || targetQuery.isBlank()
             ? "已生成候选人面试题"
-            : "已围绕“" + targetQuery + "”生成候选人面试题";
+            : "已围绕\"" + targetQuery + "\"生成候选人面试题";
         return queryPart + "，可优先从项目经历、技术深挖和履历风险三个方向展开追问。";
+    }
+
+    private String buildSummaryWithLlm(List<CandidateInterviewQuestionVO> candidates, String targetQuery) {
+        String fallback = buildSummary(candidates, targetQuery);
+        if (!llmGenerationService.isAvailable() || candidates.isEmpty()) {
+            return fallback;
+        }
+        try {
+            String summary = llmGenerationService.generate(
+                buildInterviewSystemPrompt(),
+                buildInterviewUserPrompt(candidates, targetQuery)
+            );
+            return summary == null || summary.isBlank() ? fallback : summary.trim();
+        } catch (RuntimeException exception) {
+            log.warn("Failed to generate interview summary with LLM. Fallback to rule summary.", exception);
+            return fallback;
+        }
+    }
+
+    private String buildInterviewSystemPrompt() {
+        return """
+            你是招聘场景的面试准备助手。
+            你的任务是基于候选人的面试题清单，生成一段简洁、专业的中文总结，帮助面试官快速把握面试重点。
+            要求：
+            1. 只根据输入中的目标需求、候选人和题目类别总结。
+            2. 不要编造简历中不存在的经历或问题。
+            3. 总结控制在 80 到 140 字之间。
+            4. 优先指出最值得追问的方向。
+            """;
+    }
+
+    private String buildInterviewUserPrompt(List<CandidateInterviewQuestionVO> candidates, String targetQuery) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("目标需求: ").append(targetQuery == null || targetQuery.isBlank() ? "未提供" : targetQuery).append('\n');
+        for (CandidateInterviewQuestionVO candidate : candidates) {
+            builder.append("候选人: ").append(candidate.getFullName()).append('\n');
+            builder.append("题目类别: ")
+                .append(candidate.getQuestions().stream().map(InterviewQuestionItemVO::getCategory).distinct().toList())
+                .append("\n\n");
+        }
+        return builder.toString().trim();
     }
 }

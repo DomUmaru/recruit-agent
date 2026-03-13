@@ -5,6 +5,7 @@ import com.recruit.agent.comparison.service.CandidateComparisonService;
 import com.recruit.agent.comparison.vo.CandidateComparisonEvidenceVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonItemVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
+import com.recruit.agent.llm.LlmGenerationService;
 import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
 import com.recruit.agent.rag.repository.CandidateProfileIndexRepository;
@@ -12,8 +13,9 @@ import com.recruit.agent.rag.repository.ResumeChunkRepository;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,13 +24,18 @@ import org.springframework.stereotype.Service;
 @Service
 public class CandidateComparisonServiceImpl implements CandidateComparisonService {
 
+    private static final Logger log = LoggerFactory.getLogger(CandidateComparisonServiceImpl.class);
+
     private final CandidateProfileIndexRepository candidateProfileIndexRepository;
     private final ResumeChunkRepository resumeChunkRepository;
+    private final LlmGenerationService llmGenerationService;
 
     public CandidateComparisonServiceImpl(CandidateProfileIndexRepository candidateProfileIndexRepository,
-                                          ResumeChunkRepository resumeChunkRepository) {
+                                          ResumeChunkRepository resumeChunkRepository,
+                                          LlmGenerationService llmGenerationService) {
         this.candidateProfileIndexRepository = candidateProfileIndexRepository;
         this.resumeChunkRepository = resumeChunkRepository;
+        this.llmGenerationService = llmGenerationService;
     }
 
     @Override
@@ -42,7 +49,7 @@ public class CandidateComparisonServiceImpl implements CandidateComparisonServic
         CandidateComparisonResponse response = new CandidateComparisonResponse();
         response.setTargetQuery(safeRequest.getTargetQuery());
         response.setCandidates(candidates);
-        response.setSummary(buildSummary(candidates, safeRequest.getTargetQuery()));
+        response.setSummary(buildSummaryWithLlm(candidates, safeRequest.getTargetQuery()));
         return response;
     }
 
@@ -71,16 +78,16 @@ public class CandidateComparisonServiceImpl implements CandidateComparisonServic
     private List<String> buildHighlights(CandidateProfileIndex profile) {
         List<String> highlights = new ArrayList<>();
         if (profile.getTechnicalSkills() != null && !profile.getTechnicalSkills().isEmpty()) {
-            highlights.add("技术栈覆盖：" + String.join(", ", profile.getTechnicalSkills()));
+            highlights.add("技术栈覆盖: " + String.join(", ", profile.getTechnicalSkills()));
         }
         if (Boolean.TRUE.equals(profile.getBigTech())) {
             highlights.add("具备大厂背景");
         }
         if (profile.getTotalYearsOfExperience() != null) {
-            highlights.add("工作年限：" + profile.getTotalYearsOfExperience() + " 年");
+            highlights.add("工作年限: " + profile.getTotalYearsOfExperience() + " 年");
         }
         if (profile.getSchoolTier() != null) {
-            highlights.add("学校层级：" + profile.getSchoolTier());
+            highlights.add("学校层级: " + profile.getSchoolTier());
         }
         return highlights;
     }
@@ -129,11 +136,63 @@ public class CandidateComparisonServiceImpl implements CandidateComparisonServic
             .orElse(candidates.get(0));
 
         String queryPart = targetQuery == null || targetQuery.isBlank()
-            ? "当前候选人池"
-            : "针对需求“" + targetQuery + "”";
+            ? "当前候选人中"
+            : "针对需求\"" + targetQuery + "\"，";
 
-        return queryPart + " 中，"
+        return queryPart
             + bestExperience.getFullName()
             + " 在年限或背景维度上更突出；建议结合技术栈覆盖与风险点继续筛选。";
+    }
+
+    private String buildSummaryWithLlm(List<CandidateComparisonItemVO> candidates, String targetQuery) {
+        String fallback = buildSummary(candidates, targetQuery);
+        if (!llmGenerationService.isAvailable() || candidates.isEmpty()) {
+            return fallback;
+        }
+        try {
+            String summary = llmGenerationService.generate(
+                buildComparisonSystemPrompt(),
+                buildComparisonUserPrompt(candidates, targetQuery)
+            );
+            return summary == null || summary.isBlank() ? fallback : summary.trim();
+        } catch (RuntimeException exception) {
+            log.warn("Failed to generate comparison summary with LLM. Fallback to rule summary.", exception);
+            return fallback;
+        }
+    }
+
+    private String buildComparisonSystemPrompt() {
+        return """
+            你是招聘场景的候选人对比总结助手。
+            你的任务是基于结构化候选人对比数据，生成一段简洁、专业、可执行的中文总结。
+            要求：
+            1. 不要编造不存在的经历或技能。
+            2. 只基于输入中的亮点、风险点、年限、学历、学校层级和技术栈做总结。
+            3. 总结控制在 80 到 140 字之间。
+            4. 如果存在明显风险点，需要明确指出。
+            """;
+    }
+
+    private String buildComparisonUserPrompt(List<CandidateComparisonItemVO> candidates, String targetQuery) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("目标需求: ").append(targetQuery == null || targetQuery.isBlank() ? "未提供" : targetQuery).append('\n');
+        for (CandidateComparisonItemVO candidate : candidates) {
+            builder.append("候选人: ").append(safe(candidate.getFullName())).append('\n');
+            builder.append("年限: ").append(candidate.getTotalYearsOfExperience()).append('\n');
+            builder.append("学历: ").append(safe(candidate.getHighestDegree())).append('\n');
+            builder.append("学校层级: ").append(safe(candidate.getSchoolTier())).append('\n');
+            builder.append("技术栈: ").append(join(candidate.getTechnicalSkills())).append('\n');
+            builder.append("亮点: ").append(join(candidate.getHighlights())).append('\n');
+            builder.append("风险点: ").append(join(candidate.getRiskPoints())).append("\n\n");
+        }
+        return builder.toString().trim();
+    }
+
+    private String join(List<String> values) {
+        return values == null || values.isEmpty() ? "无" : String.join("；", values);
+    }
+
+    private String safe(String value) {
+        return value == null || value.isBlank() ? "无" : value;
     }
 }

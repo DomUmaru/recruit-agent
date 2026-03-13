@@ -4,6 +4,10 @@ spring:
       chat: none
     openai:
       api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:}
   datasource:
     url: jdbc:mysql://localhost:${MYSQL_PORT:3307}/${MYSQL_DATABASE:recruit_agent}?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER:recruit}
@@ -53,5 +57,7 @@ app:
     rerank-path: /api/rerank
     connect-timeout-ms: 10000
     read-timeout-ms: 180000
+  llm:
+    provider: none
   resume:
     upload-dir: data/uploads/resumes

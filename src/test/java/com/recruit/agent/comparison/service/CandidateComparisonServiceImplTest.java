@@ -2,11 +2,13 @@ package com.recruit.agent.comparison.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.recruit.agent.comparison.dto.CandidateComparisonRequest;
 import com.recruit.agent.comparison.service.impl.CandidateComparisonServiceImpl;
 import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
+import com.recruit.agent.llm.LlmGenerationService;
 import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
 import com.recruit.agent.rag.repository.CandidateProfileIndexRepository;
@@ -22,7 +24,9 @@ class CandidateComparisonServiceImplTest {
     void shouldBuildComparisonResponse() {
         CandidateProfileIndexRepository profileRepository = org.mockito.Mockito.mock(CandidateProfileIndexRepository.class);
         ResumeChunkRepository chunkRepository = org.mockito.Mockito.mock(ResumeChunkRepository.class);
-        CandidateComparisonServiceImpl service = new CandidateComparisonServiceImpl(profileRepository, chunkRepository);
+        LlmGenerationService llmGenerationService = org.mockito.Mockito.mock(LlmGenerationService.class);
+        CandidateComparisonServiceImpl service =
+            new CandidateComparisonServiceImpl(profileRepository, chunkRepository, llmGenerationService);
 
         CandidateProfileIndex candidate1 = new CandidateProfileIndex();
         candidate1.setCandidateId("candidate-1");
@@ -46,16 +50,17 @@ class CandidateComparisonServiceImplTest {
         chunk.setSection("project");
         chunk.setPage(1);
         chunk.setChunkOrder(1);
-        chunk.setContent("负责推荐系统召回。");
+        chunk.setContent("负责搜索系统召回优化");
 
         when(profileRepository.findByCandidateId("candidate-1")).thenReturn(Optional.of(candidate1));
         when(profileRepository.findByCandidateId("candidate-2")).thenReturn(Optional.of(candidate2));
         when(chunkRepository.findByCandidateId("candidate-1")).thenReturn(List.of(chunk));
         when(chunkRepository.findByCandidateId("candidate-2")).thenReturn(List.of(chunk));
+        when(llmGenerationService.isAvailable()).thenReturn(false);
 
         CandidateComparisonRequest request = new CandidateComparisonRequest();
         request.setCandidateIds(List.of("candidate-1", "candidate-2"));
-        request.setTargetQuery("推荐系统");
+        request.setTargetQuery("搜索系统");
 
         CandidateComparisonResponse response = service.compare(request);
 
@@ -64,5 +69,33 @@ class CandidateComparisonServiceImplTest {
         assertFalse(response.getCandidates().get(0).getHighlights().isEmpty());
         assertFalse(response.getCandidates().get(1).getRiskPoints().isEmpty());
         assertFalse(response.getSummary().isBlank());
+    }
+
+    @Test
+    void shouldUseLlmSummaryWhenAvailable() {
+        CandidateProfileIndexRepository profileRepository = org.mockito.Mockito.mock(CandidateProfileIndexRepository.class);
+        ResumeChunkRepository chunkRepository = org.mockito.Mockito.mock(ResumeChunkRepository.class);
+        LlmGenerationService llmGenerationService = org.mockito.Mockito.mock(LlmGenerationService.class);
+        CandidateComparisonServiceImpl service =
+            new CandidateComparisonServiceImpl(profileRepository, chunkRepository, llmGenerationService);
+
+        CandidateProfileIndex candidate = new CandidateProfileIndex();
+        candidate.setCandidateId("candidate-1");
+        candidate.setCandidateNo("C-001");
+        candidate.setFullName("张三");
+        candidate.setTotalYearsOfExperience(new BigDecimal("5.0"));
+        candidate.setTechnicalSkills(List.of("Java", "Elasticsearch"));
+
+        when(profileRepository.findByCandidateId("candidate-1")).thenReturn(Optional.of(candidate));
+        when(chunkRepository.findByCandidateId("candidate-1")).thenReturn(List.of());
+        when(llmGenerationService.isAvailable()).thenReturn(true);
+        when(llmGenerationService.generate(anyString(), anyString())).thenReturn("这是 LLM 生成的对比总结。");
+
+        CandidateComparisonRequest request = new CandidateComparisonRequest();
+        request.setCandidateIds(List.of("candidate-1"));
+
+        CandidateComparisonResponse response = service.compare(request);
+
+        assertEquals("这是 LLM 生成的对比总结。", response.getSummary());
     }
 }
