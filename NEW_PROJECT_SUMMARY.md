@@ -4,7 +4,7 @@
 
 这是一个面向 ToB 招聘场景的智能招聘与面试辅助 Agent 后端系统。
 
-目标不是做单点搜索，而是做完整招聘工作流：
+目标不是做单点搜索，而是覆盖完整招聘工作流：
 
 - 简历摄入
 - 候选人检索
@@ -37,7 +37,10 @@
 
 ### 3. 搜索链
 
-- 候选人级 ES 搜索
+- 候选人级关键词召回
+- `candidate_profile` 向量召回
+- `resume_chunk` 向量召回
+- hybrid retrieval 融合
 - 证据级 Chunk 召回
 - 自然语言 filter parsing
 - refinement merge
@@ -81,7 +84,7 @@
 
 ### Rerank
 
-- bge-reranker-v2-m3
+- `bge-reranker-v2-m3`
 - 本地服务目录：
   - [python/rerank-service/README.md](/C:/Users/Type-umr/Desktop/recruit-agent/python/rerank-service/README.md)
 
@@ -92,8 +95,8 @@
 更准确地说，当前处于：
 
 - 核心链路已闭环
-- 本地中文模型栈已开始接入并打通
-- 接下来要从“有能力”转向“提质量、稳体验”
+- 中文本地模型栈已接入并打通
+- 开发重点开始从“有能力”转向“提质量、稳体验”
 
 ## 当前最重要的工程结论
 
@@ -105,10 +108,10 @@
 
 建议顺序：
 
-1. 收口 README / 计划文档 / 运行说明
-2. 做 hybrid retrieval
-3. 增强 query understanding
-4. 增强 router 智能度
+1. 做真实样本联调，验证 hybrid + rerank 效果
+2. 增强 query understanding
+3. 增强 router 智能度
+4. 再接 Qwen3 API 到 summary / compare / interview / router
 5. 最后再考虑 observability / eval
 
 ## 一句话总结

@@ -4,9 +4,7 @@
 
 ## 当前状态
 
-项目已经完成第一版可运行主链，当前不是“规划中”，而是一个可本地联调的后端 MVP。
-
-当前已经打通的核心链路：
+项目已经完成一条可本地联调的后端 MVP 主链，当前已打通：
 
 - 简历上传
 - PDF 文本解析
@@ -22,6 +20,7 @@
 - 本地 PaddleOCR
 - 本地 BGE-M3 embedding
 - 本地 bge-reranker-v2-m3 rerank
+- hybrid retrieval
 
 ## 技术栈
 
@@ -40,21 +39,21 @@
 
 ```text
 src/main/java/com/recruit/agent
-├─ agent
-├─ candidate
-├─ chat
-├─ common
-├─ comparison
-├─ interview
-├─ position
-├─ rag
-├─ resume
-└─ search
+├── agent
+├── candidate
+├── chat
+├── common
+├── comparison
+├── interview
+├── position
+├── rag
+├── resume
+└── search
 
 python
-├─ ocr-service
-├─ embedding-service
-└─ rerank-service
+├── ocr-service
+├── embedding-service
+└── rerank-service
 ```
 
 ## 已完成能力
@@ -76,7 +75,10 @@ python
 
 - `POST /api/search/candidates`
 - `POST /api/search/candidates/refine`
-- 候选人级 ES 检索
+- 候选人级关键词召回
+- `candidate_profile` 向量召回
+- `resume_chunk` 向量召回
+- 三路 hybrid retrieval 融合
 - 证据级 Chunk 召回
 - 自然语言 filter parsing
 - refinement merge
@@ -160,7 +162,8 @@ python
 - Java 配置：
   - `app.embedding.provider=bge-m3`
 - 已完成真实联调：
-  - chunk embedding 写入 ES
+  - `resume_chunk.embedding` 写入 ES
+  - `candidate_profile.embedding` 写入 ES
 
 ### Rerank
 
@@ -171,6 +174,7 @@ python
 - 已完成真实联调：
   - search API 调用本地 rerank 服务
   - 返回 `rerankScore`
+  - 当前只对前 20 个候选人做精排
 
 ## 本地运行
 
@@ -221,8 +225,8 @@ $env:OPENAI_API_KEY='dummy'
 
 说明：
 
-- 当前本地 profile 已默认接入 OCR / embedding / rerank
-- `OPENAI_API_KEY` 目前即使不真正调用 OpenAI，也建议给一个占位值，否则部分 Spring AI 自动配置会拦启动
+- `local` profile 已默认接入 OCR / embedding / rerank
+- 即使当前不真实调用 OpenAI，也建议给一个占位 `OPENAI_API_KEY`，避免部分 Spring AI 自动配置阻塞启动
 
 ### 4. 运行测试
 
@@ -238,7 +242,7 @@ $env:OPENAI_API_KEY='dummy'
 
 - `http://localhost:5601`
 
-在 `Dev Tools` 中执行：
+在 `Dev Tools` 执行：
 
 ```http
 GET resume_chunk/_search
@@ -282,29 +286,29 @@ docker exec recruit-agent-es curl -s "http://localhost:9200/resume_chunk/_count?
 
 ## 最近提交
 
+- `0cc873f` `refactor: improve candidate rerank strategy`
+- `d70bae0` `feat: extend hybrid retrieval with profile vectors`
+- `bc3a2c3` `feat: add candidate profile embeddings`
+- `46ebab8` `feat: add hybrid candidate retrieval with vector fusion`
 - `edc895f` `fix: normalize candidate search match scores`
 - `eedc88d` `feat: add local rerank integration`
 - `ed8b1b7` `feat: add local bge-m3 embedding integration`
 - `7367d8e` `feat: add local paddle ocr integration`
-- `2e0e5dc` `refactor: extract candidate match reason service`
-- `6867430` `refactor: split search request normalization`
-- `15f30d8` `feat: add natural language search filter parsing`
-- `d8e3f4c` `feat: enhance candidate selection phrase parsing`
 
 ## 当前限制
 
 - 候选人画像抽取仍然是规则式，不是 LLM enrichment
-- 搜索虽已具备 ES + embedding + rerank 基础，但还没有真正的 hybrid retrieval 融合策略
+- hybrid retrieval 已接通，但融合策略仍是保守版 RRF
 - Chat token 事件仍然是 summary 分片，不是底层模型原生 streaming
 - Router 仍以规则式判断为主
-- compare / interview 仍然主要依赖规则组装，不是深度模型生成
+- compare / interview 仍主要依赖规则组装，不是深度模型生成
 
 ## 下一步建议
 
 当前最值得优先做的是：
 
-- 收口文档与开发计划
-- 再进入 hybrid retrieval
-- 然后补更稳的 query understanding / router intelligence
+- 做一轮真实样本联调，验证 hybrid + rerank 的实际排序效果
+- 再补更强的 query understanding / router intelligence
+- 最后再接 Qwen3 API 到 summary / compare / interview / router
 
-不建议现在继续横向加新模块。
+当前不建议继续横向加新模块。
