@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -283,5 +284,59 @@ class CandidateSearchServiceImplTest {
         assertEquals("candidate-3", response.getCandidates().get(0).getCandidateId());
         assertTrue(response.getCandidates().get(0).getMatchScore() > 0.0d);
         verify(embeddingService).embedAll(List.of("java 搜索平台"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldFallbackWhenProfileVectorRecallFails() throws Exception {
+        ElasticsearchOperations elasticsearchOperations = org.mockito.Mockito.mock(ElasticsearchOperations.class);
+        com.recruit.agent.rag.embedding.EmbeddingService embeddingService = org.mockito.Mockito.mock(com.recruit.agent.rag.embedding.EmbeddingService.class);
+        when(embeddingService.isAvailable()).thenReturn(true);
+        when(embeddingService.embedAll(List.of("java search"))).thenReturn(List.of(new float[]{0.1f, 0.2f}));
+
+        CandidateSearchServiceImpl service = new CandidateSearchServiceImpl(
+            elasticsearchOperations,
+            embeddingService,
+            new SearchRequestNormalizationServiceImpl(new RuleBasedNaturalLanguageSearchFilterParser()),
+            new DefaultCandidateMatchReasonService(),
+            new DefaultCandidateSearchRerankService(new UnavailableRerankService())
+        );
+
+        CandidateProfileIndex keywordCandidate = new CandidateProfileIndex();
+        keywordCandidate.setCandidateId("candidate-1");
+        keywordCandidate.setCandidateNo("C-001");
+        keywordCandidate.setFullName("Zhang San");
+        keywordCandidate.setTechnicalSkills(List.of("Java"));
+
+        SearchHit<CandidateProfileIndex> keywordHit = org.mockito.Mockito.mock(SearchHit.class);
+        when(keywordHit.getContent()).thenReturn(keywordCandidate);
+        when(keywordHit.getScore()).thenReturn(1.2f);
+
+        SearchHits<CandidateProfileIndex> keywordHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(keywordHits.getSearchHits()).thenReturn(List.of(keywordHit));
+        when(keywordHits.getTotalHits()).thenReturn(1L);
+
+        SearchHits<ResumeChunk> emptyChunkHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(emptyChunkHits.getSearchHits()).thenReturn(List.of());
+
+        SearchHits<ResumeChunk> evidenceHits = org.mockito.Mockito.mock(SearchHits.class);
+        when(evidenceHits.getSearchHits()).thenReturn(List.of());
+
+        when(elasticsearchOperations.search(any(Query.class), eq(CandidateProfileIndex.class)))
+            .thenReturn(keywordHits)
+            .thenThrow(new RuntimeException("profile vector failed"));
+        when(elasticsearchOperations.search(any(Query.class), eq(ResumeChunk.class)))
+            .thenReturn(emptyChunkHits)
+            .thenReturn(evidenceHits);
+
+        CandidateSearchRequest request = new CandidateSearchRequest();
+        request.setQuery("java search");
+        request.setLimit(10);
+        request.setEvidenceLimit(1);
+
+        CandidateSearchResponse response = service.search(request);
+
+        assertEquals(1, response.getTotal());
+        assertEquals("candidate-1", response.getCandidates().get(0).getCandidateId());
     }
 }

@@ -25,6 +25,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.client.elc.NativeQueryBuilder;
@@ -39,6 +41,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
 
     private static final int RRF_WINDOW_SIZE = 60;
     private static final int VECTOR_CANDIDATE_LIMIT_MULTIPLIER = 3;
+    private static final Logger log = LoggerFactory.getLogger(CandidateSearchServiceImpl.class);
 
     private final ElasticsearchOperations elasticsearchOperations;
     private final EmbeddingService embeddingService;
@@ -297,10 +300,16 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                                                                  CandidateSearchFilter filter,
                                                                  List<String> scopeCandidateIds,
                                                                  int limit) {
-        SearchHits<CandidateProfileIndex> profileVectorHits = elasticsearchOperations.search(
-            buildVectorProfileSearchQuery(queryEmbedding, filter, scopeCandidateIds, limit),
-            CandidateProfileIndex.class
-        );
+        SearchHits<CandidateProfileIndex> profileVectorHits;
+        try {
+            profileVectorHits = elasticsearchOperations.search(
+                buildVectorProfileSearchQuery(queryEmbedding, filter, scopeCandidateIds, limit),
+                CandidateProfileIndex.class
+            );
+        } catch (RuntimeException exception) {
+            log.warn("Candidate profile vector recall failed. Fallback to non-profile-vector retrieval.", exception);
+            return List.of();
+        }
 
         return profileVectorHits.getSearchHits().stream()
             .map(hit -> new CandidateSearchHit(hit.getContent(), resolveMatchScore(hit)))
@@ -311,10 +320,16 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                                                                CandidateSearchFilter filter,
                                                                List<String> scopeCandidateIds,
                                                                int limit) {
-        SearchHits<ResumeChunk> vectorHits = elasticsearchOperations.search(
-            buildVectorChunkSearchQuery(queryEmbedding, scopeCandidateIds, limit * VECTOR_CANDIDATE_LIMIT_MULTIPLIER),
-            ResumeChunk.class
-        );
+        SearchHits<ResumeChunk> vectorHits;
+        try {
+            vectorHits = elasticsearchOperations.search(
+                buildVectorChunkSearchQuery(queryEmbedding, scopeCandidateIds, limit * VECTOR_CANDIDATE_LIMIT_MULTIPLIER),
+                ResumeChunk.class
+            );
+        } catch (RuntimeException exception) {
+            log.warn("Resume chunk vector recall failed. Fallback to non-chunk-vector retrieval.", exception);
+            return List.of();
+        }
 
         Map<String, Double> candidateScores = aggregateCandidateVectorScores(vectorHits);
         if (candidateScores.isEmpty()) {

@@ -20,6 +20,13 @@ spring:
     show-sql: true
   elasticsearch:
     uris: http://localhost:${ELASTICSEARCH_PORT:9200}
+server:
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+      force-response: true
 
 logging:
   level:
