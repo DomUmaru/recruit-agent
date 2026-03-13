@@ -1,6 +1,7 @@
 package com.recruit.agent.rag.service;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
@@ -38,7 +39,10 @@ class ResumeChunkIndexServiceImplTest {
         verify(repository).saveAll(captor.capture());
         List<ResumeChunk> chunks = captor.getValue();
         assertArrayEquals(new float[]{0.1f, 0.2f}, chunks.get(0).getEmbedding());
-        verify(embeddingService).embedAll(List.of("Java Spring"));
+        assertEquals("项目经历", chunks.get(0).getSection());
+        assertEquals("高并发微服务秒杀系统", chunks.get(0).getSubSectionTitle());
+        assertEquals("[板块:项目经历][子项:高并发微服务秒杀系统] 内容:Java Spring", chunks.get(0).getNormalizedContent());
+        verify(embeddingService).embedAll(List.of("[板块:项目经历][子项:高并发微服务秒杀系统] 内容:Java Spring"));
     }
 
     @Test
@@ -72,10 +76,12 @@ class ResumeChunkIndexServiceImplTest {
         ResumeChunkDraft draft = new ResumeChunkDraft();
         draft.setParentId("parent-1");
         draft.setChunkType(ChunkType.CHILD);
-        draft.setSection("experience");
+        draft.setSection("项目经历");
+        draft.setSubSectionTitle("高并发微服务秒杀系统");
         draft.setPage(1);
         draft.setChunkOrder(1);
         draft.setContent(content);
+        draft.setNormalizedContent("[板块:项目经历][子项:高并发微服务秒杀系统] 内容:" + content);
 
         ResumeChunkingResult result = new ResumeChunkingResult();
         result.setChunks(List.of(draft));

@@ -44,10 +44,11 @@ public class ResumeChunkIndexServiceImpl implements ResumeChunkIndexService {
             chunk.setParentId(draft.getParentId());
             chunk.setChunkType(draft.getChunkType().name());
             chunk.setSection(draft.getSection());
+            chunk.setSubSectionTitle(draft.getSubSectionTitle());
             chunk.setPage(draft.getPage());
             chunk.setChunkOrder(draft.getChunkOrder());
             chunk.setContent(draft.getContent());
-            chunk.setNormalizedContent(draft.getContent());
+            chunk.setNormalizedContent(resolveNormalizedContent(draft));
             chunk.setTags(draft.getTags());
             chunk.setMetadata(draft.getMetadata());
             chunk.setIndexedAt(LocalDateTime.now());
@@ -88,5 +89,12 @@ public class ResumeChunkIndexServiceImpl implements ResumeChunkIndexService {
             return chunk.getNormalizedContent();
         }
         return chunk.getContent() == null ? "" : chunk.getContent();
+    }
+
+    private String resolveNormalizedContent(ResumeChunkDraft draft) {
+        if (draft.getNormalizedContent() != null && !draft.getNormalizedContent().isBlank()) {
+            return draft.getNormalizedContent();
+        }
+        return draft.getContent();
     }
 }

@@ -24,6 +24,10 @@ spring:
     show-sql: true
   elasticsearch:
     uris: http://localhost:${ELASTICSEARCH_PORT:9200}
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
 server:
   servlet:
     encoding:
@@ -61,3 +65,4 @@ app:
     provider: deepseek
   resume:
     upload-dir: data/uploads/resumes
+    force-ocr: true
