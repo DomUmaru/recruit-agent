@@ -1,26 +1,82 @@
 # recruit-agent
 
-面向 ToB 招聘场景的智能招聘与面试辅助 Agent 后端系统。
+面向招聘场景的智能简历检索与候选人筛选后端系统。
 
-## 当前状态
-
-项目已经完成一条可本地联调的后端 MVP 主链，当前已打通：
-
-- 简历上传
-- PDF 文本解析
-- OCR fallback
-- Resume Chunk 索引
-- Candidate Profile 索引
-- 候选人搜索
-- refinement 多轮筛选
+当前版本已经完成一条可本地联调的主链：
+- 简历上传与解析
+- OCR / 文本抽取
+- 结构化切片与索引
+- 候选人搜索与 refinement
+- JD 绑定的岗位上下文搜索
 - 候选人对比
-- 面试题生成
-- Agent Router / Tool Calling
-- Chat API / SSE
-- 本地 PaddleOCR
-- 本地 BGE-M3 embedding
-- 本地 bge-reranker-v2-m3 rerank
-- hybrid retrieval
+- 面试交接提纲生成
+
+## 核心能力
+
+### 1. 简历摄入与索引
+- `POST /api/resumes/upload`
+- 支持 PDF 文本解析与 OCR
+- 基于规则的结构化切片
+- 写入 Elasticsearch：
+  - `resume_chunk`
+  - `candidate_profile`
+
+### 2. 搜索与 refinement
+- `POST /api/search/candidates`
+- `POST /api/search/candidates/refine`
+- 支持自然语言 query 拆解：
+  - query residual
+  - 结构化 filter
+- 当前主要过滤维度：
+  - 学历
+  - 学校层级
+  - 年限
+  - 技术栈
+  - 城市
+  - 大厂
+  - 外包
+  - career stage
+
+### 3. Hybrid retrieval + rerank
+- 关键词召回
+- `candidate_profile` 向量召回
+- `resume_chunk` 向量召回
+- rerank 精排
+- 支持 JD-aware rerank：
+  - `title`
+  - `prioritySkills`
+  - `bonusSkills`
+
+### 4. Chat Agent
+- `POST /api/chat`
+- `POST /api/chat/stream`
+- 支持场景：
+  - `SEARCH`
+  - `FILTER_REFINE`
+  - `COMPARE`
+  - `INTERVIEW`
+- chat session 可绑定 `positionId`
+- 每轮搜索会先加载对应 `PositionJD` 的默认约束
+
+### 5. 候选人对比与面试交接提纲
+- `POST /api/comparison/candidates`
+- `POST /api/interview/questions`
+
+对比能力：
+- 支持按搜索结果序号选人
+- 支持：
+  - `第1个和第9个`
+  - `前三个`
+  - `最后三个`
+  - `第1、4、5、8个`
+
+面试交接提纲能力：
+- 不再定位为“HR 出题”
+- 输出为面向技术面试官的交接材料：
+  - `推荐理由`
+  - `风险点/存疑点`
+  - `追问建议`
+- evidence 来自候选人 `resume_chunk` 中与岗位和 query 最相关的 Top-K 片段
 
 ## 技术栈
 
@@ -30,12 +86,11 @@
 - MySQL 8
 - Elasticsearch 8
 - PDFBox
-- PaddleOCR 3.0
-- BGE-M3
+- PaddleOCR
+- BGE-M3 embedding
 - bge-reranker-v2-m3
-- SSE
 
-## 模块结构
+## 项目结构
 
 ```text
 src/main/java/com/recruit/agent
@@ -56,126 +111,6 @@ python
 └── rerank-service
 ```
 
-## 已完成能力
-
-### 1. 简历摄入
-
-- `POST /api/resumes/upload`
-- 文件落盘与版本管理
-- `resume_document` 状态流转
-- PDFBox 文本提取
-- OCR fallback 判定与接入
-- 文本清洗
-- Parent-Child Chunking
-- `resume_chunk` 写入 Elasticsearch
-- 规则式候选人画像抽取
-- `candidate_profile` 写入 Elasticsearch
-
-### 2. 搜索与 refinement
-
-- `POST /api/search/candidates`
-- `POST /api/search/candidates/refine`
-- 候选人级关键词召回
-- `candidate_profile` 向量召回
-- `resume_chunk` 向量召回
-- 三路 hybrid retrieval 融合
-- 证据级 Chunk 召回
-- 自然语言 filter parsing
-- refinement merge
-- scope candidate ids
-- rerank 精排
-
-当前支持的主要筛选维度：
-
-- 学历
-- 学校层级
-- 年限
-- 技术栈
-- 城市
-- 大厂
-- 外包
-
-### 3. Agent 主链
-
-- Router 场景识别：
-  - `SEARCH`
-  - `FILTER_REFINE`
-  - `COMPARE`
-  - `INTERVIEW`
-- 会话状态管理
-- Deterministic execution
-- Spring AI Tool Calling
-
-当前正式 Tool：
-
-- `searchCandidateByJDTool`
-- `refineSearchFilterTool`
-- `compareCandidatesTool`
-- `generateInterviewQuestionsTool`
-
-### 4. Chat / SSE
-
-- `POST /api/chat`
-- `POST /api/chat/stream`
-
-当前 SSE 事件：
-
-- `start`
-- `router_decision`
-- `tool_call`
-- `tool_result`
-- `state_update`
-- `citation`
-- `comparison`
-- `token`
-- `done`
-- `error`
-
-### 5. 对比与面试题
-
-- `POST /api/comparison/candidates`
-- `POST /api/interview/questions`
-
-已支持：
-
-- 候选人横向对比
-- 差异点和风险点汇总
-- 基于简历与目标查询的结构化面试题生成
-
-## 本地模型能力
-
-### OCR
-
-- 本地服务目录：
-  - [python/ocr-service/README.md](/C:/Users/Type-umr/Desktop/recruit-agent/python/ocr-service/README.md)
-- Java 配置：
-  - `app.ocr.provider=paddle`
-- 已完成真实联调：
-  - 扫描版 PDF 上传
-  - OCR fallback
-  - `parse_type=OCR_SCANNED`
-
-### Embedding
-
-- 本地服务目录：
-  - [python/embedding-service/README.md](/C:/Users/Type-umr/Desktop/recruit-agent/python/embedding-service/README.md)
-- Java 配置：
-  - `app.embedding.provider=bge-m3`
-- 已完成真实联调：
-  - `resume_chunk.embedding` 写入 ES
-  - `candidate_profile.embedding` 写入 ES
-
-### Rerank
-
-- 本地服务目录：
-  - [python/rerank-service/README.md](/C:/Users/Type-umr/Desktop/recruit-agent/python/rerank-service/README.md)
-- Java 配置：
-  - `app.rerank.provider=bge-reranker-v2-m3`
-- 已完成真实联调：
-  - search API 调用本地 rerank 服务
-  - 返回 `rerankScore`
-  - 当前只对前 20 个候选人做精排
-
 ## 本地运行
 
 ### 1. 启动基础设施
@@ -185,7 +120,6 @@ docker compose up -d
 ```
 
 默认端口：
-
 - MySQL: `3307`
 - Elasticsearch: `9200`
 - Kibana: `5601`
@@ -224,91 +158,57 @@ $env:OPENAI_API_KEY='dummy'
 ```
 
 说明：
+- `local` profile 默认接入 OCR / embedding / rerank
+- 即使当前不走真实 OpenAI，也建议提供占位 `OPENAI_API_KEY`，避免部分自动配置阻塞启动
 
-- `local` profile 已默认接入 OCR / embedding / rerank
-- 即使当前不真实调用 OpenAI，也建议给一个占位 `OPENAI_API_KEY`，避免部分 Spring AI 自动配置阻塞启动
-
-### 4. 运行测试
+### 4. 测试
 
 ```powershell
 .\mvnw.cmd -gs global-settings.xml -s settings.xml test
 ```
 
-## 查看 Elasticsearch 数据
+## 推荐 Demo 路线
 
-### 方式 1：Kibana
+### 路线 1：搜索主链
+1. `Java 后端`
+2. `搜索 推荐 Java`
+3. `Go 微服务`
+4. `前端 React`
+5. `985 硕士 Java`
 
-打开：
+关注点：
+- topK 是否合理
+- evidence 是否能解释命中
+- refinement 是否能逐轮收敛
 
-- `http://localhost:5601`
+### 路线 2：JD 上下文 chat
+绑定：
+- `positionId = JD-DEMO-001`
 
-在 `Dev Tools` 执行：
+示例消息：
+- `帮我找 Java 后端候选人`
+- `帮我比较前两个候选人`
+- `给第2个候选人生成面试交接提纲`
 
-```http
-GET resume_chunk/_search
-{
-  "size": 5,
-  "sort": [
-    { "indexedAt": "desc" }
-  ]
-}
-```
+关注点：
+- JD 默认约束是否生效
+- `jdPreferenceScore` 是否参与排序
+- compare / interview 是否能消费会话内结果集
 
-查看候选人画像：
+## 当前项目定位
 
-```http
-GET candidate_profile/_search
-{
-  "size": 5,
-  "sort": [
-    { "indexedAt": "desc" }
-  ]
-}
-```
+主线：
+- OCR / 结构化切片
+- hybrid retrieval
+- rerank
+- JD-aware 搜索
+- compare
 
-### 方式 2：命令行
+扩展能力：
+- chat 工具编排
+- 面试交接提纲
 
-```powershell
-docker exec recruit-agent-es curl -s "http://localhost:9200/candidate_profile/_search?size=5&sort=indexedAt:desc"
-```
-
-查看某个候选人的 chunk：
-
-```powershell
-docker exec recruit-agent-es curl -s "http://localhost:9200/resume_chunk/_search?q=candidateId:candidate-ocr-e2e-001&size=5&sort=indexedAt:desc"
-```
-
-检查 embedding 字段是否存在：
-
-```powershell
-docker exec recruit-agent-es curl -s "http://localhost:9200/resume_chunk/_count?q=candidateId:candidate-ocr-e2e-001%20AND%20_exists_:embedding"
-```
-
-## 最近提交
-
-- `0cc873f` `refactor: improve candidate rerank strategy`
-- `d70bae0` `feat: extend hybrid retrieval with profile vectors`
-- `bc3a2c3` `feat: add candidate profile embeddings`
-- `46ebab8` `feat: add hybrid candidate retrieval with vector fusion`
-- `edc895f` `fix: normalize candidate search match scores`
-- `eedc88d` `feat: add local rerank integration`
-- `ed8b1b7` `feat: add local bge-m3 embedding integration`
-- `7367d8e` `feat: add local paddle ocr integration`
-
-## 当前限制
-
-- 候选人画像抽取仍然是规则式，不是 LLM enrichment
-- hybrid retrieval 已接通，但融合策略仍是保守版 RRF
-- Chat token 事件仍然是 summary 分片，不是底层模型原生 streaming
-- Router 仍以规则式判断为主
-- compare / interview 仍主要依赖规则组装，不是深度模型生成
-
-## 下一步建议
-
-当前最值得优先做的是：
-
-- 做一轮真实样本联调，验证 hybrid + rerank 的实际排序效果
-- 再补更强的 query understanding / router intelligence
-- 最后再接 Qwen3 API 到 summary / compare / interview / router
-
-当前不建议继续横向加新模块。
+不建议再继续横向扩功能。当前更高价值的工作是：
+- 固定 demo
+- 准备面试讲法
+- 清理文档和临时代码
