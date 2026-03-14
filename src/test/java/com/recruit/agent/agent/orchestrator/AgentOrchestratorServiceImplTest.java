@@ -16,7 +16,6 @@ import com.recruit.agent.agent.orchestrator.impl.AgentOrchestratorServiceImpl;
 import com.recruit.agent.agent.router.AgentRouterService;
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
 import com.recruit.agent.agent.selection.CandidateSelectionService;
-import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.chat.model.ChatMessage;
 import com.recruit.agent.chat.model.ChatScene;
@@ -113,7 +112,7 @@ class AgentOrchestratorServiceImplTest {
         assertEquals(1, response.getSearchResponse().getTotal());
         assertNotNull(response.getSummary());
         assertEquals("position-1", state.getPositionId());
-        assertEquals(CareerStage.EARLY_CAREER, state.getFilter().getCareerStage());
+        assertEquals(null, state.getFilter().getCareerStage());
         assertEquals(List.of(DegreeLevel.MASTER), state.getFilter().getHighestDegrees());
         assertEquals(new BigDecimal("0"), state.getFilter().getMinYearsOfExperience());
         assertEquals("北京", state.getFilter().getCurrentCity());

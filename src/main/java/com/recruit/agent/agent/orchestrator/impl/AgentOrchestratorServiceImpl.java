@@ -120,14 +120,14 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
     }
 
     private void bindPositionContext(ChatSession session, ChatSessionState state, AgentExecuteRequest request) {
-        String effectivePositionId = hasText(request.getPositionId()) ? request.getPositionId() : session.getPositionId();
+        String effectivePositionId = normalizeText(hasText(request.getPositionId()) ? request.getPositionId() : session.getPositionId());
         if (!hasText(effectivePositionId)) {
             state.setPositionId(null);
             session.setPositionId(null);
             return;
         }
 
-        PositionJD positionJD = positionJDRepository.findById(effectivePositionId)
+        PositionJD positionJD = resolvePositionJd(effectivePositionId)
             .orElseThrow(() -> new IllegalArgumentException("Position JD not found: " + effectivePositionId));
 
         state.setPositionId(positionJD.getId());
@@ -279,5 +279,14 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
 
     private boolean hasText(String text) {
         return text != null && !text.isBlank();
+    }
+
+    private String normalizeText(String text) {
+        return text == null ? null : text.trim();
+    }
+
+    private java.util.Optional<PositionJD> resolvePositionJd(String positionIdOrJdNo) {
+        return positionJDRepository.findById(positionIdOrJdNo)
+            .or(() -> positionJDRepository.findByJdNo(positionIdOrJdNo));
     }
 }

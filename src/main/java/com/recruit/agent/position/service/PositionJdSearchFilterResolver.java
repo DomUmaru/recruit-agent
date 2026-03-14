@@ -1,6 +1,5 @@
 package com.recruit.agent.position.service;
 
-import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.position.model.PositionJD;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
@@ -21,28 +20,16 @@ public class PositionJdSearchFilterResolver {
             return filter;
         }
 
-        filter.setCareerStage(resolveCareerStage(positionJD));
+        // Career stage is not injected as a hard default constraint yet.
+        // The current sample data does not have a reliable business-level
+        // campus / experienced truth source, so forcing it here easily
+        // empties the candidate pool.
         filter.setHighestDegrees(resolveDegree(positionJD.getRequiredDegree()));
         filter.setMinYearsOfExperience(positionJD.getMinYearsOfExperience() == null
             ? null
             : BigDecimal.valueOf(positionJD.getMinYearsOfExperience()));
         filter.setCurrentCity(normalizeText(positionJD.getLocation()));
         return filter;
-    }
-
-    private CareerStage resolveCareerStage(PositionJD positionJD) {
-        String text = (normalizeText(positionJD.getTitle()) + " " + normalizeText(positionJD.getRawJdText()))
-            .toLowerCase(Locale.ROOT);
-        if (text.isBlank()) {
-            return null;
-        }
-        if (containsAny(text, "校招", "应届", "毕业生", "实习")) {
-            return CareerStage.EARLY_CAREER;
-        }
-        if (containsAny(text, "社招", "资深", "高级", "多年经验")) {
-            return CareerStage.EXPERIENCED;
-        }
-        return null;
     }
 
     private List<DegreeLevel> resolveDegree(String requiredDegree) {

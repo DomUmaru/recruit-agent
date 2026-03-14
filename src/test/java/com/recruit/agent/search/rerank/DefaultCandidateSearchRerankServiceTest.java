@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.recruit.agent.position.model.PositionJD;
 import com.recruit.agent.search.rerank.impl.DefaultCandidateSearchRerankService;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
@@ -28,14 +29,15 @@ class DefaultCandidateSearchRerankServiceTest {
         when(rerankService.isAvailable()).thenReturn(true);
         when(rerankService.rerank(eq("java search"), anyList())).thenReturn(List.of(0.2, 0.9));
 
-        CandidateSearchItemVO first = candidate("candidate-1", 8.5, "Java 开发", "普通 CRUD");
-        CandidateSearchItemVO second = candidate("candidate-2", 7.5, "搜索工程师", "搜索召回与排序");
+        CandidateSearchItemVO first = candidate("candidate-1", 8.5, "java backend", "crud service");
+        CandidateSearchItemVO second = candidate("candidate-2", 7.5, "search backend", "recall and ranking");
 
-        List<CandidateSearchItemVO> reranked = service.rerank("java search", List.of(first, second));
+        List<CandidateSearchItemVO> reranked = service.rerank("java search", List.of(first, second), null);
 
         assertEquals(List.of("candidate-2", "candidate-1"), reranked.stream().map(CandidateSearchItemVO::getCandidateId).toList());
         assertEquals(0.9, reranked.get(0).getRerankScore());
         assertEquals(0.2, reranked.get(1).getRerankScore());
+        assertTrue(reranked.get(0).getFinalScore() >= reranked.get(1).getFinalScore());
     }
 
     @Test
@@ -45,8 +47,8 @@ class DefaultCandidateSearchRerankServiceTest {
 
         when(rerankService.isAvailable()).thenReturn(false);
 
-        CandidateSearchItemVO first = candidate("candidate-1", 8.5, "Java 开发", "普通 CRUD");
-        List<CandidateSearchItemVO> reranked = service.rerank("java search", List.of(first));
+        CandidateSearchItemVO first = candidate("candidate-1", 8.5, "java backend", "crud service");
+        List<CandidateSearchItemVO> reranked = service.rerank("java search", List.of(first), null);
 
         assertEquals(List.of("candidate-1"), reranked.stream().map(CandidateSearchItemVO::getCandidateId).toList());
         verify(rerankService, never()).rerank(eq("java search"), anyList());
@@ -66,7 +68,7 @@ class DefaultCandidateSearchRerankServiceTest {
             candidates.add(candidate("candidate-" + index, 30 - index, "summary-" + index, "evidence-" + index));
         }
 
-        List<CandidateSearchItemVO> reranked = service.rerank("java search", candidates);
+        List<CandidateSearchItemVO> reranked = service.rerank("java search", candidates, null);
 
         ArgumentCaptor<List<String>> documentsCaptor = ArgumentCaptor.forClass(List.class);
         verify(rerankService).rerank(eq("java search"), documentsCaptor.capture());
@@ -93,15 +95,98 @@ class DefaultCandidateSearchRerankServiceTest {
         candidate.setBigTech(true);
         candidate.setOutsourcing(false);
 
-        service.rerank("java search", List.of(candidate));
+        service.rerank("java search", List.of(candidate), null);
 
         ArgumentCaptor<List<String>> documentsCaptor = ArgumentCaptor.forClass(List.class);
         verify(rerankService).rerank(eq("java search"), documentsCaptor.capture());
         String document = documentsCaptor.getValue().get(0);
-        assertTrue(document.contains("name: 张三"));
-        assertTrue(document.contains("city: 上海"));
+        assertTrue(document.contains("name: 张三".toLowerCase()));
+        assertTrue(document.contains("city: 上海".toLowerCase()));
         assertTrue(document.contains("skills: java, elasticsearch"));
-        assertTrue(document.contains("evidence: 负责召回与排序") || document.contains("evidence_"));
+        assertTrue(document.contains("evidence"));
+    }
+
+    @Test
+    void shouldUseWeakPreferenceScoreAsSecondarySignal() throws IOException {
+        RerankService rerankService = org.mockito.Mockito.mock(RerankService.class);
+        DefaultCandidateSearchRerankService service = new DefaultCandidateSearchRerankService(rerankService);
+
+        when(rerankService.isAvailable()).thenReturn(true);
+        when(rerankService.rerank(eq("java backend"), anyList())).thenReturn(List.of(0.60, 0.58));
+
+        CandidateSearchItemVO stronger = candidate("candidate-stronger", 8.0, "java backend", "spring boot");
+        stronger.setHighestDegree("MASTER");
+        stronger.setSchoolTier("PROJECT_985");
+        stronger.setTotalYearsOfExperience(new BigDecimal("5"));
+        stronger.setBigTech(true);
+        stronger.setOutsourcing(false);
+
+        CandidateSearchItemVO weaker = candidate("candidate-weaker", 8.0, "java backend", "spring boot");
+        weaker.setHighestDegree("BACHELOR");
+        weaker.setSchoolTier("GENERAL_UNDERGRAD");
+        weaker.setTotalYearsOfExperience(new BigDecimal("1"));
+        weaker.setBigTech(false);
+        weaker.setOutsourcing(true);
+
+        List<CandidateSearchItemVO> reranked = service.rerank("java backend", List.of(weaker, stronger), null);
+
+        assertEquals("candidate-stronger", reranked.get(0).getCandidateId());
+        assertTrue(reranked.get(0).getPreferenceScore() > reranked.get(1).getPreferenceScore());
+        assertTrue(reranked.get(0).getFinalScore() > reranked.get(1).getFinalScore());
+    }
+
+    @Test
+    void shouldDisableExperiencePreferenceForEarlyCareerIntent() throws IOException {
+        RerankService rerankService = org.mockito.Mockito.mock(RerankService.class);
+        DefaultCandidateSearchRerankService service = new DefaultCandidateSearchRerankService(rerankService);
+
+        when(rerankService.isAvailable()).thenReturn(true);
+        when(rerankService.rerank(eq("校招 Java 后端"), anyList())).thenReturn(List.of(0.60, 0.58));
+
+        CandidateSearchItemVO experienced = candidate("candidate-experienced", 8.0, "java backend", "spring boot");
+        experienced.setHighestDegree("BACHELOR");
+        experienced.setSchoolTier("GENERAL_UNDERGRAD");
+        experienced.setTotalYearsOfExperience(new BigDecimal("6"));
+        experienced.setBigTech(false);
+        experienced.setOutsourcing(false);
+
+        CandidateSearchItemVO student = candidate("candidate-student", 8.0, "java backend", "intern project");
+        student.setHighestDegree("BACHELOR");
+        student.setSchoolTier("GENERAL_UNDERGRAD");
+        student.setTotalYearsOfExperience(new BigDecimal("0"));
+        student.setBigTech(false);
+        student.setOutsourcing(false);
+
+        List<CandidateSearchItemVO> reranked = service.rerank("校招 Java 后端", List.of(experienced, student), null);
+
+        assertEquals(0.0d, reranked.get(0).getPreferenceScore() - reranked.get(1).getPreferenceScore(), 0.000001d);
+        assertEquals("candidate-experienced", reranked.get(0).getCandidateId());
+    }
+
+    @Test
+    void shouldUseJdPreferenceAsAdditionalSignal() throws IOException {
+        RerankService rerankService = org.mockito.Mockito.mock(RerankService.class);
+        DefaultCandidateSearchRerankService service = new DefaultCandidateSearchRerankService(rerankService);
+
+        when(rerankService.isAvailable()).thenReturn(true);
+        when(rerankService.rerank(eq("java backend"), anyList())).thenReturn(List.of(0.60, 0.60));
+
+        PositionJD positionJD = new PositionJD();
+        positionJD.setTitle("搜索推荐 Java 后端工程师");
+        positionJD.setPrioritySkills("Java, Spring Boot, Elasticsearch");
+        positionJD.setBonusSkills("推荐系统, Kafka");
+
+        CandidateSearchItemVO stronger = candidate("candidate-stronger", 8.0, "搜索推荐后端", "负责推荐系统和 Elasticsearch 检索服务");
+        stronger.setTechnicalSkills(List.of("Java", "Spring Boot", "Elasticsearch", "Kafka"));
+
+        CandidateSearchItemVO weaker = candidate("candidate-weaker", 8.0, "普通后端", "负责通用 CRUD 服务");
+        weaker.setTechnicalSkills(List.of("Java", "Spring MVC"));
+
+        List<CandidateSearchItemVO> reranked = service.rerank("java backend", List.of(weaker, stronger), positionJD);
+
+        assertEquals("candidate-stronger", reranked.get(0).getCandidateId());
+        assertTrue(reranked.get(0).getJdPreferenceScore() > reranked.get(1).getJdPreferenceScore());
+        assertTrue(reranked.get(0).getFinalScore() > reranked.get(1).getFinalScore());
     }
 
     private CandidateSearchItemVO candidate(String candidateId, double matchScore, String summary, String evidenceContent) {

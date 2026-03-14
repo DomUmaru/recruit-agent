@@ -72,6 +72,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
 
         // 默认 search 会把当前输入当成 query，并沿用 state 中已有 filter。
         CandidateSearchRequest searchRequest = new CandidateSearchRequest();
+        searchRequest.setPositionId(state.getPositionId());
         searchRequest.setQuery(userInput);
         searchRequest.setFilter(state.getFilter());
         result.setSearchResponse(searchCandidateToolService.execute(searchRequest));
@@ -92,6 +93,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
     private CandidateSearchRequest buildBaseRequest(ChatSessionState state) {
         // 把当前 state 还原成一份可继续 refinement 的基础搜索请求。
         CandidateSearchRequest request = new CandidateSearchRequest();
+        request.setPositionId(state.getPositionId());
         request.setQuery(state.getCurrentQuery());
         request.setFilter(state.getFilter());
         request.setScopeCandidateIds(state.getLastCandidateIds());

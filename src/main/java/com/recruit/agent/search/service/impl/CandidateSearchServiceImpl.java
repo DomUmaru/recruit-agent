@@ -3,6 +3,8 @@ package com.recruit.agent.search.service.impl;
 import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import com.recruit.agent.position.model.PositionJD;
+import com.recruit.agent.position.repository.PositionJDRepository;
 import com.recruit.agent.rag.model.CandidateProfileIndex;
 import com.recruit.agent.rag.model.ResumeChunk;
 import com.recruit.agent.rag.embedding.EmbeddingService;
@@ -48,17 +50,20 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
     private final SearchRequestNormalizationService searchRequestNormalizationService;
     private final CandidateMatchReasonService candidateMatchReasonService;
     private final CandidateSearchRerankService candidateSearchRerankService;
+    private final PositionJDRepository positionJDRepository;
 
     public CandidateSearchServiceImpl(ElasticsearchOperations elasticsearchOperations,
                                       EmbeddingService embeddingService,
                                       SearchRequestNormalizationService searchRequestNormalizationService,
                                       CandidateMatchReasonService candidateMatchReasonService,
-                                      CandidateSearchRerankService candidateSearchRerankService) {
+                                      CandidateSearchRerankService candidateSearchRerankService,
+                                      PositionJDRepository positionJDRepository) {
         this.elasticsearchOperations = elasticsearchOperations;
         this.embeddingService = embeddingService;
         this.searchRequestNormalizationService = searchRequestNormalizationService;
         this.candidateMatchReasonService = candidateMatchReasonService;
         this.candidateSearchRerankService = candidateSearchRerankService;
+        this.positionJDRepository = positionJDRepository;
     }
 
     @Override
@@ -86,7 +91,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         List<CandidateSearchItemVO> candidates = mergedHits.stream()
             .map(hit -> toItem(hit, query, queryTerms, filter, prepared.getEvidenceLimit()))
             .toList();
-        candidates = candidateSearchRerankService.rerank(query, candidates);
+        candidates = candidateSearchRerankService.rerank(query, candidates, resolvePositionJd(request));
 
         CandidateSearchResponse response = new CandidateSearchResponse();
         response.setQuery(query);
@@ -572,6 +577,16 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
 
     private String safeText(String text) {
         return text == null ? "" : text;
+    }
+
+    private PositionJD resolvePositionJd(CandidateSearchRequest request) {
+        if (request == null || request.getPositionId() == null || request.getPositionId().isBlank()) {
+            return null;
+        }
+        String positionId = request.getPositionId().trim();
+        return positionJDRepository.findById(positionId)
+            .or(() -> positionJDRepository.findByJdNo(positionId))
+            .orElse(null);
     }
 
     private String buildVectorBaseQueryJson(List<String> scopeCandidateIds) {

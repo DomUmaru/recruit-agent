@@ -42,6 +42,12 @@ public class CandidateSearchItemVO {
 
     private Double rerankScore;
 
+    private Double preferenceScore;
+
+    private Double jdPreferenceScore;
+
+    private Double finalScore;
+
     private List<String> matchReasons;
 
     private List<CandidateSearchEvidenceVO> evidenceList;

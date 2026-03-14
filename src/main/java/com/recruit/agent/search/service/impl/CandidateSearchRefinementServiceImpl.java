@@ -68,6 +68,7 @@ public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefi
         FilterMergeMode mergeMode = safeRequest.getMergeMode() == null ? FilterMergeMode.APPEND : safeRequest.getMergeMode();
 
         CandidateSearchRequest merged = new CandidateSearchRequest();
+        merged.setPositionId(baseRequest.getPositionId());
         merged.setQuery(mergeQuery(baseRequest.getQuery(), resolveRefinementResidualQuery(safeRequest.getRefinementQuery(), llmResult), mergeMode));
         merged.setFilter(mergeFilter(baseFilter, refinementFilter, mergeMode));
         merged.setScopeCandidateIds(resolveScope(baseRequest.getScopeCandidateIds(), safeRequest.getScopeCandidateIds()));
