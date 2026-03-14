@@ -2,11 +2,11 @@
 
 面向招聘场景的智能简历检索与候选人筛选后端系统。
 
-当前版本已经完成一条可本地联调的主链：
+当前版本已经完成一条可本地联调的主链路：
 - 简历上传与解析
-- OCR / 文本抽取
+- OCR / 文本提取
 - 结构化切片与索引
-- 候选人搜索与 refinement
+- 候选人搜索与多轮 refinement
 - JD 绑定的岗位上下文搜索
 - 候选人对比
 - 面试交接提纲生成
@@ -17,17 +17,17 @@
 - `POST /api/resumes/upload`
 - 支持 PDF 文本解析与 OCR
 - 基于规则的结构化切片
-- 写入 Elasticsearch：
+- 写入 Elasticsearch
   - `resume_chunk`
   - `candidate_profile`
 
 ### 2. 搜索与 refinement
 - `POST /api/search/candidates`
 - `POST /api/search/candidates/refine`
-- 支持自然语言 query 拆解：
+- 支持自然语言 query 拆解
   - query residual
   - 结构化 filter
-- 当前主要过滤维度：
+- 当前支持的过滤维度
   - 学历
   - 学校层级
   - 年限
@@ -42,7 +42,7 @@
 - `candidate_profile` 向量召回
 - `resume_chunk` 向量召回
 - rerank 精排
-- 支持 JD-aware rerank：
+- 支持 JD-aware rerank
   - `title`
   - `prioritySkills`
   - `bonusSkills`
@@ -50,13 +50,16 @@
 ### 4. Chat Agent
 - `POST /api/chat`
 - `POST /api/chat/stream`
-- 支持场景：
+- 支持场景
   - `SEARCH`
   - `FILTER_REFINE`
   - `COMPARE`
   - `INTERVIEW`
 - chat session 可绑定 `positionId`
 - 每轮搜索会先加载对应 `PositionJD` 的默认约束
+- 支持两类筛选语义
+  - `继续筛`：继承上一轮结果，追加 filter
+  - `重新筛`：重开一轮，替换上一轮 filter
 
 ### 5. 候选人对比与面试交接提纲
 - `POST /api/comparison/candidates`
@@ -64,15 +67,15 @@
 
 对比能力：
 - 支持按搜索结果序号选人
-- 支持：
-  - `第1个和第9个`
+- 支持
+  - `第1个和第2个`
   - `前三个`
   - `最后三个`
   - `第1、4、5、8个`
 
 面试交接提纲能力：
 - 不再定位为“HR 出题”
-- 输出为面向技术面试官的交接材料：
+- 输出面向技术面试官的交接材料
   - `推荐理由`
   - `风险点/存疑点`
   - `追问建议`
@@ -159,7 +162,7 @@ $env:OPENAI_API_KEY='dummy'
 
 说明：
 - `local` profile 默认接入 OCR / embedding / rerank
-- 即使当前不走真实 OpenAI，也建议提供占位 `OPENAI_API_KEY`，避免部分自动配置阻塞启动
+- 即使当前不走真实 OpenAI，也建议提供占位 `OPENAI_API_KEY`
 
 ### 4. 测试
 
@@ -195,7 +198,7 @@ $env:OPENAI_API_KEY='dummy'
 - `jdPreferenceScore` 是否参与排序
 - compare / interview 是否能消费会话内结果集
 
-## 当前项目定位
+## 项目定位
 
 主线：
 - OCR / 结构化切片
@@ -208,7 +211,7 @@ $env:OPENAI_API_KEY='dummy'
 - chat 工具编排
 - 面试交接提纲
 
-不建议再继续横向扩功能。当前更高价值的工作是：
+当前更适合做的不是继续加功能，而是：
 - 固定 demo
 - 准备面试讲法
-- 清理文档和临时代码
+- 保持文档和运行链路一致
