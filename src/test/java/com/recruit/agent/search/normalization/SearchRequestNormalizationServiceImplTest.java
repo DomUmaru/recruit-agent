@@ -7,9 +7,9 @@ import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
 import com.recruit.agent.search.dto.CandidateSearchRequest;
+import com.recruit.agent.search.normalization.impl.SearchRequestNormalizationServiceImpl;
 import com.recruit.agent.search.parser.SearchIntentParseResult;
 import com.recruit.agent.search.parser.SearchIntentParser;
-import com.recruit.agent.search.normalization.impl.SearchRequestNormalizationServiceImpl;
 import com.recruit.agent.search.parser.impl.RuleBasedNaturalLanguageSearchFilterParser;
 import java.math.BigDecimal;
 import java.util.List;
@@ -85,7 +85,7 @@ class SearchRequestNormalizationServiceImplTest {
         PreparedCandidateSearchRequest prepared = service.prepare(request);
 
         assertEquals("", prepared.getQuery());
-        assertIterableEquals(List.of(DegreeLevel.BACHELOR), prepared.getFilter().getHighestDegrees());
+        assertEquals(null, prepared.getFilter().getHighestDegrees());
         assertIterableEquals(List.of(SchoolTier.PROJECT_985), prepared.getFilter().getSchoolTiers());
         assertEquals(new BigDecimal("5"), prepared.getFilter().getMinYearsOfExperience());
         assertEquals("上海", prepared.getFilter().getCurrentCity());
@@ -114,12 +114,34 @@ class SearchRequestNormalizationServiceImplTest {
 
         PreparedCandidateSearchRequest prepared = service.prepare(request);
 
-        assertEquals("推荐系统", prepared.getQuery());
-        assertIterableEquals(List.of(DegreeLevel.MASTER, DegreeLevel.BACHELOR), prepared.getFilter().getHighestDegrees());
+        assertEquals("java 推荐系统", prepared.getQuery());
+        assertIterableEquals(List.of(DegreeLevel.MASTER), prepared.getFilter().getHighestDegrees());
         assertIterableEquals(List.of(SchoolTier.PROJECT_985), prepared.getFilter().getSchoolTiers());
         assertEquals(new BigDecimal("5"), prepared.getFilter().getMinYearsOfExperience());
         assertIterableEquals(List.of("Java"), prepared.getFilter().getTechnicalSkills());
         assertEquals("上海", prepared.getFilter().getCurrentCity());
+    }
+
+    @Test
+    void shouldFallbackToRuleResidualWhenLlmDropsTopicTerms() {
+        SearchIntentParseResult llmResult = new SearchIntentParseResult();
+        CandidateSearchFilter llmFilter = new CandidateSearchFilter();
+        llmFilter.setTechnicalSkills(List.of("Java"));
+        llmResult.setResidualQuery("Java");
+        llmResult.setFilter(llmFilter);
+
+        SearchRequestNormalizationServiceImpl service = new SearchRequestNormalizationServiceImpl(
+            new RuleBasedNaturalLanguageSearchFilterParser(),
+            new StubSearchIntentParser(true, llmResult)
+        );
+
+        CandidateSearchRequest request = new CandidateSearchRequest();
+        request.setQuery("搜索 推荐 Java");
+
+        PreparedCandidateSearchRequest prepared = service.prepare(request);
+
+        assertEquals("搜索 推荐 java", prepared.getQuery());
+        assertIterableEquals(List.of("Java"), prepared.getFilter().getTechnicalSkills());
     }
 
     private static class StubSearchIntentParser implements SearchIntentParser {

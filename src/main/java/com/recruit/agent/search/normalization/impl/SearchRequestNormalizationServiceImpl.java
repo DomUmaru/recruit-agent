@@ -9,7 +9,10 @@ import com.recruit.agent.search.parser.SearchIntentParseResult;
 import com.recruit.agent.search.parser.SearchIntentParser;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +28,11 @@ public class SearchRequestNormalizationServiceImpl implements SearchRequestNorma
 
     private static final int DEFAULT_LIMIT = 10;
     private static final int DEFAULT_EVIDENCE_LIMIT = 3;
+    private static final List<String> KEY_TOPIC_TERMS = List.of(
+        "java", "spring", "spring boot", "elasticsearch", "redis", "mysql", "kafka",
+        "python", "go", "golang", "c++", "docker", "kubernetes",
+        "搜索", "推荐", "广告", "风控", "后端", "前端", "算法", "推荐系统"
+    );
 
     private final NaturalLanguageSearchFilterParser naturalLanguageSearchFilterParser;
     private final SearchIntentParser searchIntentParser;
@@ -72,14 +80,38 @@ public class SearchRequestNormalizationServiceImpl implements SearchRequestNorma
     }
 
     private String resolveResidualQuery(String rawQuery, SearchIntentParseResult llmResult) {
+        String fallbackResidual = safeText(naturalLanguageSearchFilterParser.stripFilterTerms(rawQuery));
         String llmResidual = llmResult == null ? "" : safeText(llmResult.getResidualQuery());
-        if (!llmResidual.isBlank()) {
+        if (!llmResidual.isBlank() && preservesKeyTopics(fallbackResidual, llmResidual)) {
             log.info("Search normalization uses LLM residual query='{}'.", llmResidual);
             return llmResidual;
         }
-        String fallbackResidual = safeText(naturalLanguageSearchFilterParser.stripFilterTerms(rawQuery));
+        if (!llmResidual.isBlank()) {
+            log.info("Search normalization rejects LLM residual query='{}' and falls back to rule residual query='{}'.",
+                llmResidual, fallbackResidual);
+        }
         log.info("Search normalization falls back to rule residual query='{}'.", fallbackResidual);
         return fallbackResidual;
+    }
+
+    private boolean preservesKeyTopics(String fallbackResidual, String llmResidual) {
+        Set<String> fallbackTopics = extractKeyTopics(fallbackResidual);
+        if (fallbackTopics.isEmpty()) {
+            return true;
+        }
+        Set<String> llmTopics = extractKeyTopics(llmResidual);
+        return llmTopics.containsAll(fallbackTopics);
+    }
+
+    private Set<String> extractKeyTopics(String text) {
+        String normalized = safeText(text).toLowerCase(Locale.ROOT);
+        Set<String> topics = new LinkedHashSet<>();
+        for (String term : KEY_TOPIC_TERMS) {
+            if (normalized.contains(term.toLowerCase(Locale.ROOT))) {
+                topics.add(term);
+            }
+        }
+        return topics;
     }
 
     private CandidateSearchFilter mergeFilter(CandidateSearchFilter explicitFilter, CandidateSearchFilter parsedFilter) {

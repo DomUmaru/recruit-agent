@@ -71,7 +71,13 @@ public class LlmSearchIntentParser implements SearchIntentParser {
             }
 
             Rules:
-            - residualQuery should keep only semantic topic keywords after removing structured filter terms.
+            - residualQuery must preserve the main retrieval topic keywords and should not over-summarize.
+            - Keep technical/domain/topic words in residualQuery whenever they are part of the search intent, such as:
+              Java, Go, C++, Python, Spring Boot, Elasticsearch, Redis, MySQL, Kafka,
+              搜索, 推荐, 广告, 风控, 后端, 前端, 算法, 推荐系统.
+            - Move clearly structured constraints into filter fields when possible:
+              degree, school tier, years of experience, current city, bigTech, outsourcing.
+            - If the query contains both topic words and structured filters, residualQuery should keep the topic words.
             - Do not invent skills, degrees, cities or years not implied by the input.
             - If unknown, use null or empty arrays.
             - Return valid JSON only.

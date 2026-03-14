@@ -27,7 +27,7 @@ public class RuleBasedNaturalLanguageSearchFilterParser implements NaturalLangua
         "大专", "专科", "associate", "高中", "high school",
         "c9", "985", "project 985", "211", "project 211", "双一流", "double first class",
         "海外名校", "海归名校", "overseas top",
-        "上海", "北京", "深圳", "杭州", "广州", "成都",
+        "上海", "北京", "深圳", "杭州", "广州", "成都", "重庆", "南京", "武汉",
         "大厂", "一线厂", "互联网大厂",
         "外包", "驻场", "不要外包", "排除外包", "非外包", "不是外包", "不要"
     );
@@ -65,7 +65,7 @@ public class RuleBasedNaturalLanguageSearchFilterParser implements NaturalLangua
         if (containsAny(text, "硕士", "研究生", "master")) {
             result.add(DegreeLevel.MASTER);
         }
-        if (containsAny(text, "本科", "学士", "bachelor", "211", "985")) {
+        if (containsAny(text, "本科", "学士", "bachelor")) {
             result.add(DegreeLevel.BACHELOR);
         }
         if (containsAny(text, "大专", "专科", "associate")) {
@@ -143,6 +143,15 @@ public class RuleBasedNaturalLanguageSearchFilterParser implements NaturalLangua
         }
         if (containsAny(text, "成都")) {
             return "成都";
+        }
+        if (containsAny(text, "重庆")) {
+            return "重庆";
+        }
+        if (containsAny(text, "南京")) {
+            return "南京";
+        }
+        if (containsAny(text, "武汉")) {
+            return "武汉";
         }
         return null;
     }

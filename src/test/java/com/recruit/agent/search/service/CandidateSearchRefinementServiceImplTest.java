@@ -159,9 +159,38 @@ class CandidateSearchRefinementServiceImplTest {
 
         CandidateSearchRequest merged = service.merge(refineRequest);
 
-        assertEquals("Java 推荐系统", merged.getQuery());
+        assertEquals("Java elasticsearch 推荐系统", merged.getQuery());
         assertIterableEquals(List.of("Elasticsearch"), merged.getFilter().getTechnicalSkills());
         assertEquals("上海", merged.getFilter().getCurrentCity());
+    }
+
+    @Test
+    void shouldFallbackToRuleResidualWhenLlmDropsRefinementTopics() {
+        CandidateSearchService candidateSearchService = org.mockito.Mockito.mock(CandidateSearchService.class);
+        SearchIntentParseResult llmResult = new SearchIntentParseResult();
+        CandidateSearchFilter llmFilter = new CandidateSearchFilter();
+        llmFilter.setTechnicalSkills(List.of("Java"));
+        llmResult.setResidualQuery("Java");
+        llmResult.setFilter(llmFilter);
+
+        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(
+            candidateSearchService,
+            new RuleBasedNaturalLanguageSearchFilterParser(),
+            new StubSearchIntentParser(true, llmResult)
+        );
+
+        CandidateSearchRequest baseRequest = new CandidateSearchRequest();
+        baseRequest.setQuery("候选人");
+
+        CandidateSearchRefineRequest refineRequest = new CandidateSearchRefineRequest();
+        refineRequest.setBaseRequest(baseRequest);
+        refineRequest.setRefinementQuery("搜索 推荐 Java");
+        refineRequest.setMergeMode(FilterMergeMode.APPEND);
+
+        CandidateSearchRequest merged = service.merge(refineRequest);
+
+        assertEquals("候选人 搜索 推荐 java", merged.getQuery());
+        assertIterableEquals(List.of("Java"), merged.getFilter().getTechnicalSkills());
     }
 
     private static class StubSearchIntentParser implements SearchIntentParser {
