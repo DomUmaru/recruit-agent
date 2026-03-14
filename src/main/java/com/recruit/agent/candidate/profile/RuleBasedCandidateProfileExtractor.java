@@ -1,5 +1,6 @@
 package com.recruit.agent.candidate.profile;
 
+import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.resume.model.ResumeDocument;
@@ -39,6 +40,7 @@ public class RuleBasedCandidateProfileExtractor implements CandidateProfileExtra
         String text = safeText(document.getCleanedText());
 
         CandidateProfileDraft draft = new CandidateProfileDraft();
+        draft.setCareerStage(extractCareerStage(text));
         draft.setHighestDegree(extractDegree(text));
         draft.setSchoolName(extractSchool(text));
         draft.setSchoolTier(extractSchoolTier(text));
@@ -56,6 +58,20 @@ public class RuleBasedCandidateProfileExtractor implements CandidateProfileExtra
             "parseType", document.getParseType() == null ? "UNKNOWN" : document.getParseType().name()
         ));
         return draft;
+    }
+
+    private CareerStage extractCareerStage(String text) {
+        if (containsAny(text, List.of("校招", "应届", "毕业生", "学生", "实习"))) {
+            return CareerStage.EARLY_CAREER;
+        }
+        BigDecimal years = extractYears(text);
+        if (years != null && years.compareTo(BigDecimal.ONE) <= 0) {
+            return CareerStage.EARLY_CAREER;
+        }
+        if (years != null && years.compareTo(new BigDecimal("2")) >= 0) {
+            return CareerStage.EXPERIENCED;
+        }
+        return null;
     }
 
     private DegreeLevel extractDegree(String text) {

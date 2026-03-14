@@ -1,202 +1,217 @@
 # recruit-agent
 
-面向 ToB 招聘场景的智能招聘与面试辅助 Agent 系统。
+面向招聘场景的智能简历检索与候选人筛选后端系统。
 
-## 项目目标
+当前版本已经完成一条可本地联调的主链路：
+- 简历上传与解析
+- OCR / 文本提取
+- 结构化切片与索引
+- 候选人搜索与多轮 refinement
+- JD 绑定的岗位上下文搜索
+- 候选人对比
+- 面试交接提纲生成
 
-本项目面向 HR、招聘专员和技术面试官，目标是构建一套可对话的招聘工作台，覆盖这些核心场景：
+## 核心能力
 
-- 候选人简历上传、解析与结构化入库
-- 基于 JD 或自然语言的候选人搜索
-- 条件筛选、多轮 refinement 和候选人对比
-- 基于简历和 JD 生成面试问题与追问建议
+### 1. 简历摄入与索引
+- `POST /api/resumes/upload`
+- 支持 PDF 文本解析与 OCR
+- 基于规则的结构化切片
+- 写入 Elasticsearch
+  - `resume_chunk`
+  - `candidate_profile`
 
-当前技术路线：
+### 2. 搜索与 refinement
+- `POST /api/search/candidates`
+- `POST /api/search/candidates/refine`
+- 支持自然语言 query 拆解
+  - query residual
+  - 结构化 filter
+- 当前支持的过滤维度
+  - 学历
+  - 学校层级
+  - 年限
+  - 技术栈
+  - 城市
+  - 大厂
+  - 外包
+  - career stage
 
-- MySQL：主数据存储
-- Elasticsearch：检索索引与候选人画像索引
-- PDFBox / OCR：简历解析
-- Spring Boot：后端服务
-- Spring AI：后续 Agent 与 Tool Calling 编排
-- SSE：后续流式对话输出
+### 3. Hybrid retrieval + rerank
+- 关键词召回
+- `candidate_profile` 向量召回
+- `resume_chunk` 向量召回
+- rerank 精排
+- 支持 JD-aware rerank
+  - `title`
+  - `prioritySkills`
+  - `bonusSkills`
 
-## 当前进度
+### 4. Chat Agent
+- `POST /api/chat`
+- `POST /api/chat/stream`
+- 支持场景
+  - `SEARCH`
+  - `FILTER_REFINE`
+  - `COMPARE`
+  - `INTERVIEW`
+- chat session 可绑定 `positionId`
+- 每轮搜索会先加载对应 `PositionJD` 的默认约束
+- 支持两类筛选语义
+  - `继续筛`：继承上一轮结果，追加 filter
+  - `重新筛`：重开一轮，替换上一轮 filter
 
-当前仓库已经完成 `Step 1`，并实现了 `Step 2` 的 MVP 链路。
+### 5. 候选人对比与面试交接提纲
+- `POST /api/comparison/candidates`
+- `POST /api/interview/questions`
 
-### Step 1 已完成
+对比能力：
+- 支持按搜索结果序号选人
+- 支持
+  - `第1个和第2个`
+  - `前三个`
+  - `最后三个`
+  - `第1、4、5、8个`
 
-- Spring Boot 3 + Java 17 工程骨架
-- Maven Wrapper、本仓库内 Maven settings
-- 核心 JPA Entity 建模
-- Elasticsearch Document 建模
-- Repository 仓储接口
-- MySQL DDL 与 Elasticsearch mapping 文档冻结
+面试交接提纲能力：
+- 不再定位为“HR 出题”
+- 输出面向技术面试官的交接材料
+  - `推荐理由`
+  - `风险点/存疑点`
+  - `追问建议`
+- evidence 来自候选人 `resume_chunk` 中与岗位和 query 最相关的 Top-K 片段
 
-### Step 2 当前已实现
+## 技术栈
 
-- 简历上传接口
-- 本地文件落盘
-- `resume_document` 落库与版本管理
-- PDFBox 文本型 PDF 解析
-- OCR fallback 编排骨架
-- 文本清洗
-- Parent-Child Chunking
-- `resume_chunk` 写入 Elasticsearch
-- 规则式候选人画像抽取
-- `candidate_profile` 写入 Elasticsearch
-- 基础单元测试与真实联调验证
+- Java 17
+- Spring Boot 3.4.x
+- Spring AI
+- MySQL 8
+- Elasticsearch 8
+- PDFBox
+- PaddleOCR
+- BGE-M3 embedding
+- bge-reranker-v2-m3
 
-## 已验证链路
-
-当前已经完成一次真实本地联调，验证通过的链路包括：
-
-- MySQL 容器启动并自动执行 schema
-- Elasticsearch 与 Kibana 可用
-- 简历上传成功
-- PDF 正文提取成功
-- `ResumeChunk` 索引写入成功
-- `CandidateProfileIndex` 索引写入成功
-- 英文年限表达如 `5 years` 可抽取为 `5.0`
-
-说明：
-
-- PowerShell 终端查看 Elasticsearch 返回值时，中文可能显示为乱码
-- 经原始字节检查，ES 中保存的 UTF-8 数据是正确的
-- 更推荐在 Kibana 或浏览器中查看中文字段
-
-## 当前模块结构
+## 项目结构
 
 ```text
 src/main/java/com/recruit/agent
+├── agent
 ├── candidate
 ├── chat
 ├── common
+├── comparison
+├── interview
 ├── position
 ├── rag
-└── resume
+├── resume
+└── search
 
-docs/schema
-├── mysql-schema-v1.sql
-├── elasticsearch-indexes-v1.json
-└── README.md
+python
+├── ocr-service
+├── embedding-service
+└── rerank-service
 ```
 
-## 核心模型
+## 本地运行
 
-### MySQL 实体
-
-- `Candidate`
-- `ResumeDocument`
-- `PositionJD`
-- `ChatSession`
-- `ChatMessage`
-
-### Elasticsearch 索引文档
-
-- `ResumeChunk`
-- `CandidateProfileIndex`
-
-## 本地开发
-
-### 1. 编译
-
-推荐使用仓库内的 Maven Wrapper，并显式指定当前仓库配置：
-
-```powershell
-.\mvnw.cmd -gs global-settings.xml -s settings.xml -DskipTests compile
-```
-
-### 2. 启动基础设施
-
-先复制环境变量模板：
-
-```powershell
-Copy-Item .env.example .env
-```
-
-启动本地容器：
+### 1. 启动基础设施
 
 ```powershell
 docker compose up -d
 ```
 
-当前默认端口：
+默认端口：
+- MySQL: `3307`
+- Elasticsearch: `9200`
+- Kibana: `5601`
 
-- MySQL: `localhost:3307`
-- Elasticsearch: `http://localhost:9200`
-- Kibana: `http://localhost:5601`
+### 2. 启动本地模型服务
 
-MySQL 启动时会自动执行：
+OCR:
 
-- [mysql-schema-v1.sql](C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/mysql-schema-v1.sql)
+```powershell
+cd python/ocr-service
+.\install.ps1
+.\start.ps1
+```
+
+Embedding:
+
+```powershell
+cd python/embedding-service
+.\install.ps1
+.\start.ps1
+```
+
+Rerank:
+
+```powershell
+cd python/rerank-service
+.\install.ps1
+.\start.ps1
+```
 
 ### 3. 启动应用
 
-使用本地 profile 启动：
-
 ```powershell
+$env:OPENAI_API_KEY='dummy'
 .\mvnw.cmd -gs global-settings.xml -s settings.xml spring-boot:run "-Dspring-boot.run.profiles=local"
 ```
 
-如果本机 Maven Wrapper 后台启动不稳定，也可以先打包再运行：
+说明：
+- `local` profile 默认接入 OCR / embedding / rerank
+- 即使当前不走真实 OpenAI，也建议提供占位 `OPENAI_API_KEY`
 
-```powershell
-.\mvnw.cmd -gs global-settings.xml -s settings.xml -DskipTests package
-java -jar target/recruit-agent-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
-```
-
-### 4. 运行测试
+### 4. 测试
 
 ```powershell
 .\mvnw.cmd -gs global-settings.xml -s settings.xml test
 ```
 
-## 主要接口
+## 推荐 Demo 路线
 
-### 简历上传
+### 路线 1：搜索主链
+1. `Java 后端`
+2. `搜索 推荐 Java`
+3. `Go 微服务`
+4. `前端 React`
+5. `985 硕士 Java`
 
-`POST /api/resumes/upload`
+关注点：
+- topK 是否合理
+- evidence 是否能解释命中
+- refinement 是否能逐轮收敛
 
-请求类型：
+### 路线 2：JD 上下文 chat
+绑定：
+- `positionId = JD-DEMO-001`
 
-- `multipart/form-data`
+示例消息：
+- `帮我找 Java 后端候选人`
+- `帮我比较前两个候选人`
+- `给第2个候选人生成面试交接提纲`
 
-表单字段：
+关注点：
+- JD 默认约束是否生效
+- `jdPreferenceScore` 是否参与排序
+- compare / interview 是否能消费会话内结果集
 
-- `candidateId`
-- `file`
+## 项目定位
 
-成功后会返回：
+主线：
+- OCR / 结构化切片
+- hybrid retrieval
+- rerank
+- JD-aware 搜索
+- compare
 
-- `documentId`
-- `candidateId`
-- `versionNo`
-- `status`
-- `fileStorageKey`
-- `createdAt`
+扩展能力：
+- chat 工具编排
+- 面试交接提纲
 
-## 文档与配置
-
-- 项目规划文档：`NEW_PROJECT_SUMMARY.md`
-- MySQL DDL：[docs/schema/mysql-schema-v1.sql](C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/mysql-schema-v1.sql)
-- Elasticsearch mapping：[docs/schema/elasticsearch-indexes-v1.json](C:/Users/Type-umr/Desktop/recruit-agent/docs/schema/elasticsearch-indexes-v1.json)
-- 本地 Docker 环境：[docker-compose.yml](C:/Users/Type-umr/Desktop/recruit-agent/docker-compose.yml)
-- 本地应用配置：[application-local.yml](C:/Users/Type-umr/Desktop/recruit-agent/src/main/resources/application-local.yml)
-
-## 当前限制
-
-- OCR 目前只有 fallback 接口与编排骨架，尚未接入真实识别引擎
-- 向量字段已预留，但还未接真实 embedding 生成
-- 候选人画像抽取当前为规则式实现，不是 LLM enrichment
-- Section 识别与 chunk 切分规则仍偏 MVP
-- 搜索服务、Agent Router、SSE 对话接口尚未开始
-
-## 下一步
-
-建议下一阶段进入 `Step 3`：
-
-- 基于 `CandidateProfileIndex` 的候选人聚合检索
-- 基于 `ResumeChunk` 的证据级召回
-- 条件过滤与多轮 refinement
-- 为后续 Agent Tool 编排准备统一搜索入口
+当前更适合做的不是继续加功能，而是：
+- 固定 demo
+- 准备面试讲法
+- 保持文档和运行链路一致

@@ -1,6 +1,7 @@
 package com.recruit.agent.resume.parser;
 
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -12,9 +13,19 @@ public class DefaultResumeParsingDetector implements ResumeParsingDetector {
     private static final int MIN_TOTAL_TEXT_LENGTH = 80;
     private static final int MIN_NON_EMPTY_PAGES = 1;
 
+    @Value("${app.resume.force-ocr:false}")
+    private boolean forceOcr;
+
     @Override
     public ResumeParsingDecision detect(ResumeParseResult parseResult) {
         ResumeParsingDecision decision = new ResumeParsingDecision();
+
+        if (forceOcr) {
+            decision.setTextPdf(false);
+            decision.setRequireOcrFallback(true);
+            decision.setReason("本地调试已启用 force-ocr，强制走 OCR 解析链路");
+            return decision;
+        }
 
         int totalTextLength = safeText(parseResult.getCleanedText()).length();
         int nonEmptyPages = countNonEmptyPages(parseResult.getPageTexts());

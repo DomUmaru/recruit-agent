@@ -3,49 +3,26 @@ package com.recruit.agent.rag.chunk;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 简历分块草稿对象，用于 chunking 过程中的中间产物。
- */
 public class ResumeChunkDraft {
 
-    /**
-     * 父分块 ID。
-     */
     private String parentId;
 
-    /**
-     * 分块类型。
-     */
     private ChunkType chunkType;
 
-    /**
-     * 简历分段名称。
-     */
     private String section;
 
-    /**
-     * 页码。
-     */
+    private String subSectionTitle;
+
     private Integer page;
 
-    /**
-     * 分块顺序。
-     */
     private Integer chunkOrder;
 
-    /**
-     * 分块内容。
-     */
     private String content;
 
-    /**
-     * 分块标签。
-     */
+    private String normalizedContent;
+
     private List<String> tags;
 
-    /**
-     * 扩展元数据。
-     */
     private Map<String, Object> metadata;
 
     public String getParentId() {
@@ -72,6 +49,14 @@ public class ResumeChunkDraft {
         this.section = section;
     }
 
+    public String getSubSectionTitle() {
+        return subSectionTitle;
+    }
+
+    public void setSubSectionTitle(String subSectionTitle) {
+        this.subSectionTitle = subSectionTitle;
+    }
+
     public Integer getPage() {
         return page;
     }
@@ -94,6 +79,14 @@ public class ResumeChunkDraft {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public String getNormalizedContent() {
+        return normalizedContent;
+    }
+
+    public void setNormalizedContent(String normalizedContent) {
+        this.normalizedContent = normalizedContent;
     }
 
     public List<String> getTags() {

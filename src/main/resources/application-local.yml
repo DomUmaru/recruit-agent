@@ -1,4 +1,13 @@
 spring:
+  ai:
+    model:
+      chat: deepseek
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:${OPENAI_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
+      chat:
+        options:
+          model: ${DEEPSEEK_CHAT_MODEL:${OPENAI_CHAT_MODEL:deepseek-chat}}
   datasource:
     url: jdbc:mysql://localhost:${MYSQL_PORT:3307}/${MYSQL_DATABASE:recruit_agent}?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER:recruit}
@@ -15,6 +24,17 @@ spring:
     show-sql: true
   elasticsearch:
     uris: http://localhost:${ELASTICSEARCH_PORT:9200}
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+server:
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+      force-response: true
 
 logging:
   level:
@@ -22,5 +42,27 @@ logging:
     org.hibernate.SQL: debug
 
 app:
+  ocr:
+    provider: paddle
+    base-url: http://localhost:9001
+    recognize-path: /api/ocr/recognize
+    connect-timeout-ms: 10000
+    read-timeout-ms: 180000
+  embedding:
+    provider: bge-m3
+    base-url: http://localhost:9002
+    embed-path: /api/embedding/embed
+    connect-timeout-ms: 10000
+    read-timeout-ms: 120000
+    dimension: 1024
+  rerank:
+    provider: bge-reranker-v2-m3
+    base-url: http://localhost:9003
+    rerank-path: /api/rerank
+    connect-timeout-ms: 10000
+    read-timeout-ms: 180000
+  llm:
+    provider: deepseek
   resume:
     upload-dir: data/uploads/resumes
+    force-ocr: true

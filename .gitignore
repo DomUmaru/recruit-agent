@@ -30,3 +30,20 @@ Thumbs.db
 *.temp
 tmp/
 data/
+
+# Local OCR service runtime artifacts
+python/ocr-service/.venv/
+python/ocr-service/.cache/
+python/ocr-service/*.log
+python/ocr-service/*.pid
+python/ocr-service/__pycache__/
+python/embedding-service/.venv/
+python/embedding-service/.cache/
+python/embedding-service/*.log
+python/embedding-service/*.pid
+python/embedding-service/__pycache__/
+python/rerank-service/.venv/
+python/rerank-service/.cache/
+python/rerank-service/*.log
+python/rerank-service/*.pid
+python/rerank-service/__pycache__/
