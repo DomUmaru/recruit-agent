@@ -14,6 +14,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class ChatComparisonCandidatePayload {
 
+    private Integer rank;
+
     private String candidateId;
 
     private String candidateNo;

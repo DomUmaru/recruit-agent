@@ -92,6 +92,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
             .map(hit -> toItem(hit, query, queryTerms, filter, prepared.getEvidenceLimit()))
             .toList();
         candidates = candidateSearchRerankService.rerank(query, candidates, resolvePositionJd(request));
+        assignSearchRanks(candidates);
 
         CandidateSearchResponse response = new CandidateSearchResponse();
         response.setQuery(query);
@@ -268,6 +269,15 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         item.setMatchReasons(candidateMatchReasonService.buildMatchReasons(profile, query, queryTerms, filter));
         item.setEvidenceList(loadEvidence(profile.getCandidateId(), query, queryTerms, evidenceLimit));
         return item;
+    }
+
+    private void assignSearchRanks(List<CandidateSearchItemVO> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < candidates.size(); index++) {
+            candidates.get(index).setRank(index + 1);
+        }
     }
 
     private double resolveMatchScore(SearchHit<?> hit) {

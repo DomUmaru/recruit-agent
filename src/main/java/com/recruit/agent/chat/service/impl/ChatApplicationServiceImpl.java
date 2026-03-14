@@ -216,6 +216,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
 
     private ChatComparisonCandidatePayload toComparisonCandidatePayload(CandidateComparisonItemVO candidate) {
         ChatComparisonCandidatePayload payload = new ChatComparisonCandidatePayload();
+        payload.setRank(candidate.getRank());
         payload.setCandidateId(candidate.getCandidateId());
         payload.setCandidateNo(candidate.getCandidateNo());
         payload.setFullName(candidate.getFullName());

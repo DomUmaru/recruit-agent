@@ -14,6 +14,11 @@ import lombok.Setter;
 @NoArgsConstructor
 public class CandidateComparisonItemVO {
 
+    /**
+     * 1-based rank within the compared candidate set.
+     */
+    private Integer rank;
+
     private String candidateId;
 
     private String candidateNo;

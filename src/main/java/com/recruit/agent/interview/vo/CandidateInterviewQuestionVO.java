@@ -13,6 +13,11 @@ import lombok.Setter;
 @NoArgsConstructor
 public class CandidateInterviewQuestionVO {
 
+    /**
+     * 1-based rank within the current interview candidate set.
+     */
+    private Integer rank;
+
     private String candidateId;
 
     private String candidateNo;

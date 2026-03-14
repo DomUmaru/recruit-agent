@@ -54,6 +54,7 @@ class InterviewQuestionServiceImplTest {
 
         assertEquals(request.getTargetQuery(), response.getTargetQuery());
         assertEquals(1, response.getCandidates().size());
+        assertEquals(1, response.getCandidates().get(0).getRank());
         assertFalse(response.getCandidates().get(0).getQuestions().isEmpty());
         assertFalse(response.getSummary().isBlank());
     }

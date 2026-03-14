@@ -107,6 +107,7 @@ class CandidateSearchServiceImplTest {
 
         assertEquals(1, response.getTotal());
         assertEquals("candidate-1", response.getCandidates().get(0).getCandidateId());
+        assertEquals(1, response.getCandidates().get(0).getRank());
         assertEquals("上海", response.getCandidates().get(0).getCurrentCity());
         assertTrue(Double.isFinite(response.getCandidates().get(0).getMatchScore()));
         assertFalse(response.getCandidates().get(0).getEvidenceList().isEmpty());
@@ -158,6 +159,7 @@ class CandidateSearchServiceImplTest {
         assertEquals("", response.getQuery());
         assertEquals(1, response.getTotal());
         assertEquals("candidate-1", response.getCandidates().get(0).getCandidateId());
+        assertEquals(1, response.getCandidates().get(0).getRank());
         verify(elasticsearchOperations).search(any(Query.class), eq(CandidateProfileIndex.class));
     }
 

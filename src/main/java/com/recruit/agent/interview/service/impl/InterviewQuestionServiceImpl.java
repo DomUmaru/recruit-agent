@@ -49,12 +49,22 @@ public class InterviewQuestionServiceImpl implements InterviewQuestionService {
                 .map(candidateId -> buildCandidateQuestions(candidateId, safeRequest.getTargetQuery()))
                 .filter(Objects::nonNull)
                 .toList();
+        assignInterviewRanks(candidates);
 
         InterviewQuestionResponse response = new InterviewQuestionResponse();
         response.setTargetQuery(safeRequest.getTargetQuery());
         response.setCandidates(candidates);
         response.setSummary(buildSummaryWithLlm(candidates, safeRequest.getTargetQuery()));
         return response;
+    }
+
+    private void assignInterviewRanks(List<CandidateInterviewQuestionVO> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < candidates.size(); index++) {
+            candidates.get(index).setRank(index + 1);
+        }
     }
 
     private CandidateInterviewQuestionVO buildCandidateQuestions(String candidateId, String targetQuery) {

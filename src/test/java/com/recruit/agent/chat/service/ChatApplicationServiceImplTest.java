@@ -46,6 +46,7 @@ class ChatApplicationServiceImplTest {
         evidence.setContent("负责推荐系统召回。");
 
         CandidateSearchItemVO candidate = new CandidateSearchItemVO();
+        candidate.setRank(1);
         candidate.setCandidateId("candidate-1");
         candidate.setCandidateNo("C-001");
         candidate.setFullName("张三");
@@ -104,6 +105,7 @@ class ChatApplicationServiceImplTest {
         evidence.setContent("负责推荐系统召回优化");
 
         CandidateComparisonItemVO candidate = new CandidateComparisonItemVO();
+        candidate.setRank(1);
         candidate.setCandidateId("candidate-1");
         candidate.setCandidateNo("C-001");
         candidate.setFullName("张三");
@@ -133,6 +135,7 @@ class ChatApplicationServiceImplTest {
         List<ChatStreamEvent> events = service.stream(request);
 
         assertEquals(ChatScene.COMPARE, response.getScene());
+        assertEquals(1, response.getComparison().getCandidates().get(0).getRank());
         assertEquals("推荐系统", response.getComparison().getTargetQuery());
         assertEquals("comparison", events.get(4).getEvent());
         assertEquals("state_update", events.get(5).getEvent());
@@ -154,6 +157,7 @@ class ChatApplicationServiceImplTest {
         question.setQuestion("请介绍你做推荐系统召回优化时的关键技术取舍。");
 
         CandidateInterviewQuestionVO candidate = new CandidateInterviewQuestionVO();
+        candidate.setRank(1);
         candidate.setCandidateId("candidate-1");
         candidate.setCandidateNo("C-001");
         candidate.setFullName("张三");
@@ -181,6 +185,7 @@ class ChatApplicationServiceImplTest {
         List<ChatStreamEvent> events = service.stream(request);
 
         assertEquals(ChatScene.INTERVIEW, response.getScene());
+        assertEquals(1, response.getInterviewResponse().getCandidates().get(0).getRank());
         assertEquals("推荐系统", response.getInterviewResponse().getTargetQuery());
         assertEquals("interview", events.get(4).getEvent());
         assertEquals("state_update", events.get(5).getEvent());

@@ -39,6 +39,23 @@ class CandidateSelectionServiceImplTest {
     }
 
     @Test
+    void shouldResolveDiscreteOrdinalListsAndLastN() {
+        CandidateSelectionServiceImpl service = new CandidateSelectionServiceImpl();
+        ChatSessionState state = new ChatSessionState();
+        state.setLastCandidateIds(List.of(
+            "candidate-1", "candidate-2", "candidate-3", "candidate-4", "candidate-5",
+            "candidate-6", "candidate-7", "candidate-8", "candidate-9"
+        ));
+
+        assertEquals(List.of("candidate-1", "candidate-4", "candidate-5", "candidate-8"),
+            service.resolveSelectedCandidateIds(state, "帮我比较第1、4、5、8个候选人"));
+        assertEquals(List.of("candidate-1", "candidate-4", "candidate-5", "candidate-8"),
+            service.resolveSelectedCandidateIds(state, "帮我比较1、4、5、8号候选人"));
+        assertEquals(List.of("candidate-7", "candidate-8", "candidate-9"),
+            service.resolveSelectedCandidateIds(state, "帮我比较最后三个候选人"));
+    }
+
+    @Test
     void shouldResolvePronounAndAllSelection() {
         CandidateSelectionServiceImpl service = new CandidateSelectionServiceImpl();
         ChatSessionState state = new ChatSessionState();

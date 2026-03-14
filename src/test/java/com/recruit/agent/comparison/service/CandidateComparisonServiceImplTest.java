@@ -66,6 +66,8 @@ class CandidateComparisonServiceImplTest {
 
         assertEquals(request.getTargetQuery(), response.getTargetQuery());
         assertEquals(2, response.getCandidates().size());
+        assertEquals(1, response.getCandidates().get(0).getRank());
+        assertEquals(2, response.getCandidates().get(1).getRank());
         assertFalse(response.getCandidates().get(0).getHighlights().isEmpty());
         assertFalse(response.getCandidates().get(1).getRiskPoints().isEmpty());
         assertFalse(response.getSummary().isBlank());

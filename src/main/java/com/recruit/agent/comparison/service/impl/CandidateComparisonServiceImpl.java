@@ -45,12 +45,22 @@ public class CandidateComparisonServiceImpl implements CandidateComparisonServic
             .map(this::buildComparisonItem)
             .filter(Objects::nonNull)
             .toList();
+        assignComparisonRanks(candidates);
 
         CandidateComparisonResponse response = new CandidateComparisonResponse();
         response.setTargetQuery(safeRequest.getTargetQuery());
         response.setCandidates(candidates);
         response.setSummary(buildSummaryWithLlm(candidates, safeRequest.getTargetQuery()));
         return response;
+    }
+
+    private void assignComparisonRanks(List<CandidateComparisonItemVO> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < candidates.size(); index++) {
+            candidates.get(index).setRank(index + 1);
+        }
     }
 
     private CandidateComparisonItemVO buildComparisonItem(String candidateId) {
