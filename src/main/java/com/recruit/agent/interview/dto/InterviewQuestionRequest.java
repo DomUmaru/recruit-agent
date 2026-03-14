@@ -15,5 +15,7 @@ public class InterviewQuestionRequest {
 
     private List<String> candidateIds;
 
+    private String positionId;
+
     private String targetQuery;
 }

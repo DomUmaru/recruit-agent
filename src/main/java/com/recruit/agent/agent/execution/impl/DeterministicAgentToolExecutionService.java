@@ -54,6 +54,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
         if (routeDecision.getScene() == ChatScene.INTERVIEW) {
             InterviewQuestionRequest interviewRequest = new InterviewQuestionRequest();
             interviewRequest.setCandidateIds(resolveInterviewCandidateIds(state));
+            interviewRequest.setPositionId(state.getPositionId());
             interviewRequest.setTargetQuery(state.getCurrentQuery());
             result.setInterviewResponse(generateInterviewQuestionsToolService.execute(interviewRequest));
             return result;
