@@ -152,6 +152,12 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                     .toList())))));
         }
 
+        if (filter.getCareerStage() != null) {
+            filters.add(Query.of(q -> q.term(t -> t
+                .field("careerStage")
+                .value(FieldValue.of(filter.getCareerStage().name())))));
+        }
+
         if (filter.getHighestDegrees() != null && !filter.getHighestDegrees().isEmpty()) {
             filters.add(Query.of(q -> q.terms(t -> t
                 .field("highestDegree")
@@ -419,6 +425,12 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                     .toList())))));
         }
 
+        if (filter.getCareerStage() != null) {
+            filters.add(Query.of(q -> q.term(t -> t
+                .field("careerStage")
+                .value(FieldValue.of(filter.getCareerStage().name())))));
+        }
+
         if (filter.getHighestDegrees() != null && !filter.getHighestDegrees().isEmpty()) {
             filters.add(Query.of(q -> q.terms(t -> t
                 .field("highestDegree")
@@ -601,6 +613,15 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                   }
                 }
                 """.formatted(idsJson));
+        }
+        if (filter.getCareerStage() != null) {
+            clauses.add("""
+                {
+                  "term": {
+                    "careerStage": %s
+                  }
+                }
+                """.formatted(toJsonString(filter.getCareerStage().name())));
         }
         if (filter.getHighestDegrees() != null && !filter.getHighestDegrees().isEmpty()) {
             String values = filter.getHighestDegrees().stream()

@@ -1,5 +1,6 @@
 package com.recruit.agent.search.parser.impl;
 
+import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
@@ -14,9 +15,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
-/**
- * 基于规则的自然语言过滤条件解析器。
- */
 @Service
 public class RuleBasedNaturalLanguageSearchFilterParser implements NaturalLanguageSearchFilterParser {
 
@@ -25,6 +23,7 @@ public class RuleBasedNaturalLanguageSearchFilterParser implements NaturalLangua
     private static final List<String> REMOVABLE_TERMS = List.of(
         "博士", "phd", "doctor", "硕士", "研究生", "master", "本科", "学士", "bachelor",
         "大专", "专科", "associate", "高中", "high school",
+        "校招", "应届", "学生", "实习", "无经验", "毕业生", "社招", "社招岗", "资深", "多年经验",
         "c9", "985", "project 985", "211", "project 211", "双一流", "double first class",
         "海外名校", "海归名校", "overseas top",
         "上海", "北京", "深圳", "杭州", "广州", "成都", "重庆", "南京", "武汉",
@@ -36,6 +35,7 @@ public class RuleBasedNaturalLanguageSearchFilterParser implements NaturalLangua
     public CandidateSearchFilter parse(String text) {
         String normalized = normalize(text);
         CandidateSearchFilter filter = new CandidateSearchFilter();
+        filter.setCareerStage(parseCareerStage(normalized));
         filter.setHighestDegrees(parseDegrees(normalized));
         filter.setSchoolTiers(parseSchoolTiers(normalized));
         filter.setMinYearsOfExperience(parseMinYears(normalized));
@@ -55,6 +55,16 @@ public class RuleBasedNaturalLanguageSearchFilterParser implements NaturalLangua
         }
         cleaned = cleaned.replaceAll("\\s+", " ").trim();
         return cleaned;
+    }
+
+    private CareerStage parseCareerStage(String text) {
+        if (containsAny(text, "校招", "应届", "学生", "实习", "无经验", "毕业生")) {
+            return CareerStage.EARLY_CAREER;
+        }
+        if (containsAny(text, "社招", "社招岗", "资深", "多年经验")) {
+            return CareerStage.EXPERIENCED;
+        }
+        return null;
     }
 
     private List<DegreeLevel> parseDegrees(String text) {
@@ -157,10 +167,7 @@ public class RuleBasedNaturalLanguageSearchFilterParser implements NaturalLangua
     }
 
     private Boolean parseBigTech(String text) {
-        if (containsAny(text, "大厂", "一线厂", "互联网大厂")) {
-            return true;
-        }
-        return null;
+        return containsAny(text, "大厂", "一线厂", "互联网大厂") ? Boolean.TRUE : null;
     }
 
     private Boolean parseOutsourcing(String text) {

@@ -12,7 +12,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * 会话状态装配服务实现。
+ * Chat session state persistence adapter.
  */
 @Service
 public class ChatSessionStateServiceImpl implements ChatSessionStateService {
@@ -29,6 +29,7 @@ public class ChatSessionStateServiceImpl implements ChatSessionStateService {
     @Override
     public ChatSessionState load(ChatSession session) {
         ChatSessionState state = new ChatSessionState();
+        state.setPositionId(session.getPositionId());
         state.setCurrentScene(session.getCurrentScene() == null ? ChatScene.SEARCH : session.getCurrentScene());
         state.setCurrentQuery(session.getCurrentQuery());
         state.setFilter(read(session.getFiltersJson(), CandidateSearchFilter.class, new CandidateSearchFilter()));
@@ -40,6 +41,7 @@ public class ChatSessionStateServiceImpl implements ChatSessionStateService {
 
     @Override
     public void apply(ChatSession session, ChatSessionState state) {
+        session.setPositionId(state.getPositionId());
         session.setCurrentScene(state.getCurrentScene());
         session.setCurrentQuery(state.getCurrentQuery());
         session.setFiltersJson(write(state.getFilter()));
@@ -56,7 +58,7 @@ public class ChatSessionStateServiceImpl implements ChatSessionStateService {
         try {
             return objectMapper.readValue(json, type);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("反序列化会话状态失败", ex);
+            throw new IllegalStateException("Failed to deserialize chat session state.", ex);
         }
     }
 
@@ -67,7 +69,7 @@ public class ChatSessionStateServiceImpl implements ChatSessionStateService {
         try {
             return objectMapper.readValue(json, type);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("反序列化会话状态失败", ex);
+            throw new IllegalStateException("Failed to deserialize chat session state.", ex);
         }
     }
 
@@ -78,7 +80,7 @@ public class ChatSessionStateServiceImpl implements ChatSessionStateService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("序列化会话状态失败", ex);
+            throw new IllegalStateException("Failed to serialize chat session state.", ex);
         }
     }
 }

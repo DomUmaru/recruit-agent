@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.llm.LlmGenerationService;
@@ -18,7 +19,7 @@ class LlmSearchIntentParserTest {
     void shouldParseResidualQueryAndStructuredFilter() {
         LlmSearchIntentParser parser = new LlmSearchIntentParser(
             new StubLlmGenerationService(true, """
-                {"residualQuery":"推荐系统","highestDegrees":["MASTER"],"schoolTiers":["PROJECT_985"],"minYearsOfExperience":5,"technicalSkills":["Java","Elasticsearch"],"currentCity":"上海","bigTech":true,"outsourcing":false}
+                {"residualQuery":"推荐系统","careerStage":"EARLY_CAREER","highestDegrees":["MASTER"],"schoolTiers":["PROJECT_985"],"minYearsOfExperience":5,"technicalSkills":["Java","Elasticsearch"],"currentCity":"上海","bigTech":true,"outsourcing":false}
                 """),
             new ObjectMapper()
         );
@@ -26,6 +27,7 @@ class LlmSearchIntentParserTest {
         SearchIntentParseResult result = parser.parse("上海 985 硕士 5年 Java Elasticsearch 推荐系统");
 
         assertEquals("推荐系统", result.getResidualQuery());
+        assertEquals(CareerStage.EARLY_CAREER, result.getFilter().getCareerStage());
         assertIterableEquals(List.of(DegreeLevel.MASTER), result.getFilter().getHighestDegrees());
         assertIterableEquals(List.of(SchoolTier.PROJECT_985), result.getFilter().getSchoolTiers());
         assertEquals(new BigDecimal("5"), result.getFilter().getMinYearsOfExperience());
@@ -45,6 +47,7 @@ class LlmSearchIntentParserTest {
         SearchIntentParseResult result = parser.parse("Java 推荐系统");
 
         assertEquals(null, result.getResidualQuery());
+        assertEquals(null, result.getFilter().getCareerStage());
         assertEquals(null, result.getFilter().getHighestDegrees());
         assertEquals(null, result.getFilter().getTechnicalSkills());
     }
@@ -54,15 +57,16 @@ class LlmSearchIntentParserTest {
         LlmSearchIntentParser parser = new LlmSearchIntentParser(
             new StubLlmGenerationService(true, """
                 ```json
-                {"residualQuery":"推荐系统","technicalSkills":["Java"],"currentCity":"上海"}
+                {"residualQuery":"推荐系统","careerStage":"EARLY_CAREER","technicalSkills":["Java"],"currentCity":"上海"}
                 ```
                 """),
             new ObjectMapper()
         );
 
-        SearchIntentParseResult result = parser.parse("上海 Java 推荐系统");
+        SearchIntentParseResult result = parser.parse("上海 校招 Java 推荐系统");
 
         assertEquals("推荐系统", result.getResidualQuery());
+        assertEquals(CareerStage.EARLY_CAREER, result.getFilter().getCareerStage());
         assertIterableEquals(List.of("Java"), result.getFilter().getTechnicalSkills());
         assertEquals("上海", result.getFilter().getCurrentCity());
     }

@@ -58,6 +58,7 @@ public class CandidateProfileIndexServiceImpl implements CandidateProfileIndexSe
 
         profileIndex.setCandidateId(candidate.getId());
         profileIndex.setCandidateNo(candidate.getCandidateNo());
+        profileIndex.setCareerStage(draft.getCareerStage() == null ? null : draft.getCareerStage().name());
         profileIndex.setFullName(candidate.getFullName());
         profileIndex.setCurrentCity(candidate.getCurrentCity());
         profileIndex.setSchoolName(draft.getSchoolName());
@@ -125,6 +126,7 @@ public class CandidateProfileIndexServiceImpl implements CandidateProfileIndexSe
         List<String> parts = new ArrayList<>();
         add(parts, profileIndex.getFullName());
         add(parts, profileIndex.getCurrentCity());
+        add(parts, profileIndex.getCareerStage());
         add(parts, profileIndex.getSchoolName());
         add(parts, profileIndex.getHighestDegree());
         add(parts, profileIndex.getSchoolTier());

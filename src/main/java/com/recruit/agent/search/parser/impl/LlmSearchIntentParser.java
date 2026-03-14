@@ -1,6 +1,7 @@
 package com.recruit.agent.search.parser.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.llm.LlmGenerationService;
@@ -61,6 +62,7 @@ public class LlmSearchIntentParser implements SearchIntentParser {
             Return JSON only with this schema:
             {
               "residualQuery":"string",
+              "careerStage":"EARLY_CAREER|EXPERIENCED|null",
               "highestDegrees":["BACHELOR|MASTER|DOCTOR|ASSOCIATE|HIGH_SCHOOL"],
               "schoolTiers":["PROJECT_985|PROJECT_211|DOUBLE_FIRST_CLASS|C9|OVERSEAS_TOP"],
               "minYearsOfExperience": number,
@@ -76,7 +78,9 @@ public class LlmSearchIntentParser implements SearchIntentParser {
               Java, Go, C++, Python, Spring Boot, Elasticsearch, Redis, MySQL, Kafka,
               搜索, 推荐, 广告, 风控, 后端, 前端, 算法, 推荐系统.
             - Move clearly structured constraints into filter fields when possible:
-              degree, school tier, years of experience, current city, bigTech, outsourcing.
+              career stage, degree, school tier, years of experience, current city, bigTech, outsourcing.
+            - Map 校招, 应届, 学生, 实习, 无经验, 毕业生 to EARLY_CAREER when implied.
+            - Map 社招, 资深, 多年经验 to EXPERIENCED when implied.
             - If the query contains both topic words and structured filters, residualQuery should keep the topic words.
             - Do not invent skills, degrees, cities or years not implied by the input.
             - If unknown, use null or empty arrays.
@@ -90,6 +94,7 @@ public class LlmSearchIntentParser implements SearchIntentParser {
 
     private CandidateSearchFilter toFilter(LlmSearchIntentOutput output) {
         CandidateSearchFilter filter = new CandidateSearchFilter();
+        filter.setCareerStage(parseEnum(output.getCareerStage(), CareerStage.class));
         filter.setHighestDegrees(parseDegrees(output.getHighestDegrees()));
         filter.setSchoolTiers(parseSchoolTiers(output.getSchoolTiers()));
         filter.setMinYearsOfExperience(output.getMinYearsOfExperience());
@@ -165,6 +170,7 @@ public class LlmSearchIntentParser implements SearchIntentParser {
 
     private static class LlmSearchIntentOutput {
         private String residualQuery;
+        private String careerStage;
         private List<String> highestDegrees;
         private List<String> schoolTiers;
         private BigDecimal minYearsOfExperience;
@@ -183,6 +189,14 @@ public class LlmSearchIntentParser implements SearchIntentParser {
 
         public List<String> getHighestDegrees() {
             return highestDegrees;
+        }
+
+        public String getCareerStage() {
+            return careerStage;
+        }
+
+        public void setCareerStage(String careerStage) {
+            this.careerStage = careerStage;
         }
 
         public void setHighestDegrees(List<String> highestDegrees) {

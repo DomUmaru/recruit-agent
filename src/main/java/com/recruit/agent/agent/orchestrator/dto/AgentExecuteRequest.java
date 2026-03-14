@@ -5,7 +5,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Agent 执行请求。
+ * Internal agent execute request.
  */
 @Getter
 @Setter
@@ -13,17 +13,22 @@ import lombok.Setter;
 public class AgentExecuteRequest {
 
     /**
-     * 会话编号。
+     * Bound position ID for the current execution.
+     */
+    private String positionId;
+
+    /**
+     * Session identifier.
      */
     private String sessionNo;
 
     /**
-     * 用户编号。
+     * User identifier.
      */
     private String userId;
 
     /**
-     * 用户输入。
+     * User input text.
      */
     private String userInput;
 }

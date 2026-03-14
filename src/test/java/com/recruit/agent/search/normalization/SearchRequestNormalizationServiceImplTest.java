@@ -3,6 +3,7 @@ package com.recruit.agent.search.normalization;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 
+import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
@@ -37,6 +38,7 @@ class SearchRequestNormalizationServiceImplTest {
 
         assertEquals("推荐系统 java", prepared.getQuery());
         assertEquals("推荐系统 Java 985 5年 上海 不要外包", prepared.getRawQuery());
+        assertEquals(null, prepared.getFilter().getCareerStage());
         assertIterableEquals(List.of(DegreeLevel.BACHELOR), prepared.getFilter().getHighestDegrees());
         assertIterableEquals(List.of(SchoolTier.PROJECT_985), prepared.getFilter().getSchoolTiers());
         assertIterableEquals(List.of("Java"), prepared.getFilter().getTechnicalSkills());
@@ -98,6 +100,7 @@ class SearchRequestNormalizationServiceImplTest {
     void shouldPreferLlmResidualQueryAndSupplementParsedFilter() {
         SearchIntentParseResult llmResult = new SearchIntentParseResult();
         CandidateSearchFilter llmFilter = new CandidateSearchFilter();
+        llmFilter.setCareerStage(CareerStage.EARLY_CAREER);
         llmFilter.setHighestDegrees(List.of(DegreeLevel.MASTER));
         llmFilter.setSchoolTiers(List.of(SchoolTier.PROJECT_985));
         llmFilter.setCurrentCity("上海");
@@ -110,11 +113,12 @@ class SearchRequestNormalizationServiceImplTest {
         );
 
         CandidateSearchRequest request = new CandidateSearchRequest();
-        request.setQuery("上海 985 硕士 5年 Java 推荐系统");
+        request.setQuery("校招 上海 985 硕士 5年 Java 推荐系统");
 
         PreparedCandidateSearchRequest prepared = service.prepare(request);
 
         assertEquals("java 推荐系统", prepared.getQuery());
+        assertEquals(CareerStage.EARLY_CAREER, prepared.getFilter().getCareerStage());
         assertIterableEquals(List.of(DegreeLevel.MASTER), prepared.getFilter().getHighestDegrees());
         assertIterableEquals(List.of(SchoolTier.PROJECT_985), prepared.getFilter().getSchoolTiers());
         assertEquals(new BigDecimal("5"), prepared.getFilter().getMinYearsOfExperience());

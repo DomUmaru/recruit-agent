@@ -4,22 +4,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.recruit.agent.agent.orchestrator.AgentOrchestratorService;
 import com.recruit.agent.agent.orchestrator.dto.AgentExecuteResponse;
 import com.recruit.agent.agent.router.dto.AgentRouteDecision;
+import com.recruit.agent.chat.dto.ChatRequest;
+import com.recruit.agent.chat.dto.ChatResponse;
+import com.recruit.agent.chat.dto.ChatStreamEvent;
+import com.recruit.agent.chat.model.ChatScene;
+import com.recruit.agent.chat.service.impl.ChatApplicationServiceImpl;
 import com.recruit.agent.comparison.vo.CandidateComparisonEvidenceVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonItemVO;
 import com.recruit.agent.comparison.vo.CandidateComparisonResponse;
 import com.recruit.agent.interview.vo.CandidateInterviewQuestionVO;
 import com.recruit.agent.interview.vo.InterviewQuestionItemVO;
 import com.recruit.agent.interview.vo.InterviewQuestionResponse;
-import com.recruit.agent.chat.dto.ChatRequest;
-import com.recruit.agent.chat.dto.ChatResponse;
-import com.recruit.agent.chat.dto.ChatStreamEvent;
-import com.recruit.agent.chat.model.ChatScene;
-import com.recruit.agent.chat.service.impl.ChatApplicationServiceImpl;
 import com.recruit.agent.search.vo.CandidateSearchEvidenceVO;
 import com.recruit.agent.search.vo.CandidateSearchItemVO;
 import com.recruit.agent.search.vo.CandidateSearchResponse;
@@ -59,11 +60,12 @@ class ChatApplicationServiceImplTest {
         executeResponse.setSessionNo("session-1");
         executeResponse.setRouteDecision(decision);
         executeResponse.setSearchResponse(searchResponse);
-        executeResponse.setSummary("已完成候选人搜索，返回 2 位候选人。");
+        executeResponse.setSummary("已完成候选人搜索，返回 1 位候选人。");
 
         when(orchestratorService.execute(any())).thenReturn(executeResponse);
 
         ChatRequest request = new ChatRequest();
+        request.setPositionId("position-1");
         request.setSessionNo("session-1");
         request.setUserId("user-1");
         request.setMessage("找 Java 候选人");
@@ -82,6 +84,9 @@ class ChatApplicationServiceImplTest {
         assertEquals("done", events.get(events.size() - 1).getEvent());
         assertTrue(events.stream().anyMatch(event -> "token".equals(event.getEvent())));
         assertFalse(response.getSummary().isBlank());
+        verify(orchestratorService, org.mockito.Mockito.atLeastOnce()).execute(org.mockito.ArgumentMatchers.argThat(
+            executeRequest -> "position-1".equals(executeRequest.getPositionId())
+        ));
     }
 
     @Test

@@ -77,6 +77,7 @@ public class ChatApplicationServiceImpl implements ChatApplicationService {
     private AgentExecuteRequest toExecuteRequest(ChatRequest request) {
         // ChatRequest 更贴近前端语义，这里统一转换成内部编排层使用的 AgentExecuteRequest。
         AgentExecuteRequest executeRequest = new AgentExecuteRequest();
+        executeRequest.setPositionId(request.getPositionId());
         executeRequest.setSessionNo(request.getSessionNo());
         executeRequest.setUserId(request.getUserId());
         executeRequest.setUserInput(request.getMessage());

@@ -116,6 +116,9 @@ public class SearchRequestNormalizationServiceImpl implements SearchRequestNorma
 
     private CandidateSearchFilter mergeFilter(CandidateSearchFilter explicitFilter, CandidateSearchFilter parsedFilter) {
         CandidateSearchFilter merged = new CandidateSearchFilter();
+        merged.setCareerStage(explicitFilter != null && explicitFilter.getCareerStage() != null
+            ? explicitFilter.getCareerStage()
+            : parsedFilter == null ? null : parsedFilter.getCareerStage());
         merged.setHighestDegrees(mergeList(
             explicitFilter == null ? null : explicitFilter.getHighestDegrees(),
             parsedFilter == null ? null : parsedFilter.getHighestDegrees()

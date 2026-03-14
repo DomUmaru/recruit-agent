@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * 聊天会话运行态对象。
+ * In-memory chat session state.
  */
 @Getter
 @Setter
@@ -16,32 +16,37 @@ import lombok.Setter;
 public class ChatSessionState {
 
     /**
-     * 当前场景。
+     * Bound position ID for the current chat session.
+     */
+    private String positionId;
+
+    /**
+     * Current scene.
      */
     private ChatScene currentScene;
 
     /**
-     * 当前查询语句。
+     * Current accumulated query.
      */
     private String currentQuery;
 
     /**
-     * 当前过滤条件。
+     * Current accumulated filter.
      */
     private CandidateSearchFilter filter = new CandidateSearchFilter();
 
     /**
-     * 上一轮候选人结果 ID。
+     * Candidate IDs returned in the previous turn.
      */
     private List<String> lastCandidateIds;
 
     /**
-     * 当前选中候选人 ID。
+     * Candidate IDs selected from the previous turn.
      */
     private List<String> selectedCandidateIds;
 
     /**
-     * 当前排序方式。
+     * Current sort mode.
      */
     private String sortMode;
 }

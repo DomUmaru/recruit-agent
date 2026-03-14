@@ -19,14 +19,16 @@ class ChatSessionStateServiceImplTest {
         ChatSessionStateServiceImpl service = new ChatSessionStateServiceImpl(new ObjectMapper());
 
         ChatSession session = new ChatSession();
+        session.setPositionId("position-1");
         session.setCurrentScene(ChatScene.FILTER_REFINE);
         session.setCurrentQuery("推荐系统");
-        session.setFiltersJson("{\"technicalSkills\":[\"Java\"],\"minYearsOfExperience\":3.0}");
+        session.setFiltersJson("{\"careerStage\":null,\"highestDegrees\":null,\"schoolTiers\":null,\"minYearsOfExperience\":3.0,\"technicalSkills\":[\"Java\"],\"currentCity\":null,\"bigTech\":null,\"outsourcing\":null}");
         session.setLastCandidateIdsJson("[\"candidate-1\",\"candidate-2\"]");
         session.setSelectedCandidateIdsJson("[\"candidate-1\"]");
         session.setSortMode("score_desc");
 
         ChatSessionState state = service.load(session);
+        assertEquals("position-1", state.getPositionId());
         assertEquals(ChatScene.FILTER_REFINE, state.getCurrentScene());
         assertEquals("推荐系统", state.getCurrentQuery());
         assertIterableEquals(List.of("Java"), state.getFilter().getTechnicalSkills());
@@ -38,7 +40,8 @@ class ChatSessionStateServiceImplTest {
         state.setLastCandidateIds(List.of("candidate-3"));
         service.apply(session, state);
 
+        assertEquals("position-1", session.getPositionId());
         assertEquals("[\"candidate-3\"]", session.getLastCandidateIdsJson());
-        assertEquals("{\"highestDegrees\":null,\"schoolTiers\":null,\"minYearsOfExperience\":null,\"technicalSkills\":[\"Java\",\"Elasticsearch\"],\"currentCity\":null,\"bigTech\":null,\"outsourcing\":null}", session.getFiltersJson());
+        assertEquals("{\"careerStage\":null,\"highestDegrees\":null,\"schoolTiers\":null,\"minYearsOfExperience\":null,\"technicalSkills\":[\"Java\",\"Elasticsearch\"],\"currentCity\":null,\"bigTech\":null,\"outsourcing\":null}", session.getFiltersJson());
     }
 }

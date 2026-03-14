@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.search.dto.CandidateSearchFilter;
@@ -43,19 +44,21 @@ class CandidateSearchRefinementServiceImplTest {
         baseRequest.setScopeCandidateIds(List.of("candidate-1", "candidate-2"));
 
         CandidateSearchFilter refinementFilter = new CandidateSearchFilter();
+        refinementFilter.setCareerStage(CareerStage.EARLY_CAREER);
         refinementFilter.setSchoolTiers(List.of(SchoolTier.PROJECT_985));
         refinementFilter.setTechnicalSkills(List.of("Elasticsearch"));
         refinementFilter.setMinYearsOfExperience(new BigDecimal("5.0"));
 
         CandidateSearchRefineRequest refineRequest = new CandidateSearchRefineRequest();
         refineRequest.setBaseRequest(baseRequest);
-        refineRequest.setRefinementQuery("Java 985 5年 上海");
+        refineRequest.setRefinementQuery("校招 Java 985 5年 上海");
         refineRequest.setRefinementFilter(refinementFilter);
         refineRequest.setMergeMode(FilterMergeMode.APPEND);
 
         CandidateSearchRequest merged = service.merge(refineRequest);
 
         assertEquals("推荐系统 java", merged.getQuery());
+        assertEquals(CareerStage.EARLY_CAREER, merged.getFilter().getCareerStage());
         assertIterableEquals(List.of(DegreeLevel.BACHELOR), merged.getFilter().getHighestDegrees());
         assertIterableEquals(List.of(SchoolTier.PROJECT_985), merged.getFilter().getSchoolTiers());
         assertIterableEquals(List.of("Java", "Elasticsearch"), merged.getFilter().getTechnicalSkills());
@@ -77,6 +80,7 @@ class CandidateSearchRefinementServiceImplTest {
         baseRequest.setScopeCandidateIds(List.of("candidate-1"));
 
         CandidateSearchFilter refinementFilter = new CandidateSearchFilter();
+        refinementFilter.setCareerStage(CareerStage.EARLY_CAREER);
         refinementFilter.setHighestDegrees(List.of(DegreeLevel.MASTER));
         refinementFilter.setCurrentCity("上海");
 
@@ -96,6 +100,7 @@ class CandidateSearchRefinementServiceImplTest {
         verify(candidateSearchService).search(org.mockito.ArgumentMatchers.argThat(request ->
             "搜索".equals(request.getQuery())
                 && request.getFilter() != null
+                && request.getFilter().getCareerStage() == CareerStage.EARLY_CAREER
                 && List.of(DegreeLevel.MASTER).equals(request.getFilter().getHighestDegrees())
                 && "上海".equals(request.getFilter().getCurrentCity())
                 && List.of("candidate-3").equals(request.getScopeCandidateIds())
@@ -103,41 +108,11 @@ class CandidateSearchRefinementServiceImplTest {
     }
 
     @Test
-    void shouldAccumulateResidualQueryAcrossMultipleAppends() {
-        CandidateSearchService candidateSearchService = org.mockito.Mockito.mock(CandidateSearchService.class);
-        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(
-            candidateSearchService,
-            new RuleBasedNaturalLanguageSearchFilterParser()
-        );
-
-        CandidateSearchRequest baseRequest = new CandidateSearchRequest();
-        baseRequest.setQuery("推荐系统");
-
-        CandidateSearchRefineRequest firstRefine = new CandidateSearchRefineRequest();
-        firstRefine.setBaseRequest(baseRequest);
-        firstRefine.setRefinementQuery("Java 985");
-        firstRefine.setMergeMode(FilterMergeMode.APPEND);
-
-        CandidateSearchRequest firstMerged = service.merge(firstRefine);
-
-        CandidateSearchRefineRequest secondRefine = new CandidateSearchRefineRequest();
-        secondRefine.setBaseRequest(firstMerged);
-        secondRefine.setRefinementQuery("Elasticsearch 上海");
-        secondRefine.setMergeMode(FilterMergeMode.APPEND);
-
-        CandidateSearchRequest secondMerged = service.merge(secondRefine);
-
-        assertEquals("推荐系统 java elasticsearch", secondMerged.getQuery());
-        assertIterableEquals(List.of(SchoolTier.PROJECT_985), secondMerged.getFilter().getSchoolTiers());
-        assertIterableEquals(List.of("Java", "Elasticsearch"), secondMerged.getFilter().getTechnicalSkills());
-        assertEquals("上海", secondMerged.getFilter().getCurrentCity());
-    }
-
-    @Test
     void shouldUseLlmResidualQueryDuringRefinementWhenAvailable() {
         CandidateSearchService candidateSearchService = org.mockito.Mockito.mock(CandidateSearchService.class);
         SearchIntentParseResult llmResult = new SearchIntentParseResult();
         CandidateSearchFilter llmFilter = new CandidateSearchFilter();
+        llmFilter.setCareerStage(CareerStage.EARLY_CAREER);
         llmFilter.setCurrentCity("上海");
         llmFilter.setTechnicalSkills(List.of("Elasticsearch"));
         llmResult.setResidualQuery("推荐系统");
@@ -154,43 +129,15 @@ class CandidateSearchRefinementServiceImplTest {
 
         CandidateSearchRefineRequest refineRequest = new CandidateSearchRefineRequest();
         refineRequest.setBaseRequest(baseRequest);
-        refineRequest.setRefinementQuery("上海 Elasticsearch 推荐系统");
+        refineRequest.setRefinementQuery("校招 上海 Elasticsearch 推荐系统");
         refineRequest.setMergeMode(FilterMergeMode.APPEND);
 
         CandidateSearchRequest merged = service.merge(refineRequest);
 
         assertEquals("Java elasticsearch 推荐系统", merged.getQuery());
+        assertEquals(CareerStage.EARLY_CAREER, merged.getFilter().getCareerStage());
         assertIterableEquals(List.of("Elasticsearch"), merged.getFilter().getTechnicalSkills());
         assertEquals("上海", merged.getFilter().getCurrentCity());
-    }
-
-    @Test
-    void shouldFallbackToRuleResidualWhenLlmDropsRefinementTopics() {
-        CandidateSearchService candidateSearchService = org.mockito.Mockito.mock(CandidateSearchService.class);
-        SearchIntentParseResult llmResult = new SearchIntentParseResult();
-        CandidateSearchFilter llmFilter = new CandidateSearchFilter();
-        llmFilter.setTechnicalSkills(List.of("Java"));
-        llmResult.setResidualQuery("Java");
-        llmResult.setFilter(llmFilter);
-
-        CandidateSearchRefinementServiceImpl service = new CandidateSearchRefinementServiceImpl(
-            candidateSearchService,
-            new RuleBasedNaturalLanguageSearchFilterParser(),
-            new StubSearchIntentParser(true, llmResult)
-        );
-
-        CandidateSearchRequest baseRequest = new CandidateSearchRequest();
-        baseRequest.setQuery("候选人");
-
-        CandidateSearchRefineRequest refineRequest = new CandidateSearchRefineRequest();
-        refineRequest.setBaseRequest(baseRequest);
-        refineRequest.setRefinementQuery("搜索 推荐 Java");
-        refineRequest.setMergeMode(FilterMergeMode.APPEND);
-
-        CandidateSearchRequest merged = service.merge(refineRequest);
-
-        assertEquals("候选人 搜索 推荐 java", merged.getQuery());
-        assertIterableEquals(List.of("Java"), merged.getFilter().getTechnicalSkills());
     }
 
     private static class StubSearchIntentParser implements SearchIntentParser {

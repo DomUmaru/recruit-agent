@@ -149,6 +149,9 @@ public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefi
         }
 
         CandidateSearchFilter merged = copyFilter(baseFilter);
+        if (refinementFilter.getCareerStage() != null) {
+            merged.setCareerStage(refinementFilter.getCareerStage());
+        }
         merged.setHighestDegrees(mergeList(baseFilter.getHighestDegrees(), refinementFilter.getHighestDegrees()));
         merged.setSchoolTiers(mergeList(baseFilter.getSchoolTiers(), refinementFilter.getSchoolTiers()));
         merged.setTechnicalSkills(mergeList(baseFilter.getTechnicalSkills(), refinementFilter.getTechnicalSkills()));
@@ -173,6 +176,7 @@ public class CandidateSearchRefinementServiceImpl implements CandidateSearchRefi
     private CandidateSearchFilter copyFilter(CandidateSearchFilter filter) {
         CandidateSearchFilter source = safeFilter(filter);
         CandidateSearchFilter copy = new CandidateSearchFilter();
+        copy.setCareerStage(source.getCareerStage());
         copy.setHighestDegrees(copyList(source.getHighestDegrees()));
         copy.setSchoolTiers(copyList(source.getSchoolTiers()));
         copy.setMinYearsOfExperience(source.getMinYearsOfExperience());

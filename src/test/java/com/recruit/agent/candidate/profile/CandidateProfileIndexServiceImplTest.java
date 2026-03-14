@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.recruit.agent.candidate.model.Candidate;
 import com.recruit.agent.candidate.model.CandidateSource;
 import com.recruit.agent.candidate.model.CandidateStatus;
+import com.recruit.agent.candidate.model.CareerStage;
 import com.recruit.agent.candidate.model.DegreeLevel;
 import com.recruit.agent.candidate.model.SchoolTier;
 import com.recruit.agent.candidate.repository.CandidateRepository;
@@ -51,6 +52,7 @@ class CandidateProfileIndexServiceImplTest {
         verify(indexRepository).save(captor.capture());
         CandidateProfileIndex saved = captor.getValue();
 
+        assertEquals(CareerStage.EARLY_CAREER.name(), saved.getCareerStage());
         assertNotNull(saved.getEmbedding());
         assertEquals(2, saved.getEmbedding().length);
         verify(embeddingService).embedAll(any());
@@ -97,10 +99,11 @@ class CandidateProfileIndexServiceImplTest {
 
     private CandidateProfileDraft buildDraft() {
         CandidateProfileDraft draft = new CandidateProfileDraft();
+        draft.setCareerStage(CareerStage.EARLY_CAREER);
         draft.setHighestDegree(DegreeLevel.BACHELOR);
         draft.setSchoolName("同济大学");
         draft.setSchoolTier(SchoolTier.PROJECT_985);
-        draft.setTotalYearsOfExperience(new BigDecimal("5.0"));
+        draft.setTotalYearsOfExperience(new BigDecimal("1.0"));
         draft.setTechnicalSkills(List.of("Java", "Elasticsearch"));
         draft.setIndustryTags(List.of("企业服务"));
         draft.setCompanyTags(List.of("腾讯"));

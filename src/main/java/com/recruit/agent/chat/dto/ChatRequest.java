@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * 统一聊天请求。
+ * Unified chat request.
  */
 @Getter
 @Setter
@@ -14,17 +14,22 @@ import lombok.Setter;
 public class ChatRequest {
 
     /**
-     * 会话编号；为空时自动创建。
+     * Bound position ID for the current chat session.
+     */
+    private String positionId;
+
+    /**
+     * Session identifier. A new session will be created when absent.
      */
     private String sessionNo;
 
     /**
-     * 用户编号；为空时使用匿名用户。
+     * User identifier. Falls back to anonymous when absent.
      */
     private String userId;
 
     /**
-     * 用户输入。
+     * User input text.
      */
     @NotBlank
     private String message;
