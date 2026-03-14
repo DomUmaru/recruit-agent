@@ -1,135 +1,108 @@
 # Demo Playbook
 
-## Demo 目标
+## Demo Goal
 
-用最少的步骤展示三件事：
-- 系统能在简历库里找对人
-- 系统能在岗位上下文里做更贴业务的排序
-- 系统不仅能搜，还能继续比较和生成面试交接提纲
+Use the smallest possible sequence to show three things:
+- the system can find the right candidates
+- the system can refine results under a JD context
+- the system can continue into compare and interviewer handoff
 
-## 演示前准备
+## Prerequisites
 
-确保以下服务已启动：
+Make sure these are running:
 - MySQL
 - Elasticsearch
 - OCR service
 - embedding service
 - rerank service
-- Spring Boot application
+- Spring Boot app
 
-建议使用：
-- Apifox 或 Postman 调接口
-- Kibana 只作为辅助查看，不作为主演示入口
+Recommended clients:
+- Apifox
+- Postman
 
-## 主 Demo
+Use UTF-8 JSON for Chinese chat requests.
 
-### Demo 1：基础搜索
+## Demo Route A: Search
 
-接口：
-- `POST /api/search/candidates`
+### Step 1
+`POST /api/search/candidates`
 
-推荐 query：
+Query:
 - `Java 后端`
 
-讲法：
-- 先证明系统能做基础岗位搜索
-- 返回的不只是名字，而是带有 evidence 的 topK 候选人
-- 说明这不是纯关键词匹配，而是 keyword + profile vector + chunk vector + rerank 的融合结果
+What to say:
+- this proves the system can do base candidate retrieval
+- results include evidence, not just names
+- the ranking is not pure keyword matching
 
-重点关注：
-- top5 是否合理
-- `matchReasons`
-- `evidenceList`
-
-### Demo 2：方向型搜索
-
-推荐 query：
+### Step 2
+Query:
 - `搜索 推荐 Java`
-- 或 `Go 微服务`
 
-讲法：
-- 这条用来证明系统能区分方向，不是所有后端都混在一起
-- 可以强调 search intent parsing 和 rerank 在起作用
+What to say:
+- this proves the system can distinguish direction-specific backend profiles
 
-### Demo 3：结构化过滤
-
-推荐 query：
+### Step 3
+Query:
 - `985 硕士 Java`
 
-讲法：
-- query 最终会保留成检索主题
-- `985`、`硕士` 进入结构化 filter
-- 说明系统支持“语义主题 + 结构化约束”的组合搜索
+What to say:
+- semantic topic and structured filters are separated
+- `Java` remains the retrieval theme
+- `985` and `硕士` become filters
 
-## JD 上下文 Demo
+## Demo Route B: JD Chat
 
-### Demo 4：岗位上下文 chat
-
-接口：
-- `POST /api/chat`
-
-固定参数：
+Use:
 - `positionId = JD-DEMO-001`
 
-推荐消息：
-- `帮我找 Java 后端候选人`
+### Step 1
+`帮我找 Java 后端候选人`
 
-讲法：
-- chat 不是脱离业务上下文的自由问答
-- 会话先绑定岗位
-- 系统会先读取 `PositionJD`
-- 再把岗位默认约束带进搜索
-- 最终排序还会引入 `jdPreferenceScore`
+What to say:
+- the chat session is bound to a JD
+- the system first loads JD defaults
+- ranking includes JD-aware preference
 
-### Demo 5：候选人对比
+### Step 2
+`只看985硕士`
 
-同一会话继续输入：
-- `帮我比较前两个候选人`
+What to say:
+- this is append-style refinement
+- it narrows the previous result set
 
-讲法：
-- compare 消费的是当前结果集，不需要重新搜
-- 系统已经把结果集显式编号
-- HR 可以直接引用“前两个”“第1、第2个”这类表达
+### Step 3
+`继续只看北京的`
 
-### Demo 6：面试交接提纲
+What to say:
+- the original search theme is inherited
+- only the filters continue to narrow
 
-同一会话继续输入：
-- `给第2个候选人生成面试交接提纲`
+### Step 4
+`重新帮我筛选一次，这次按上海 Java`
 
-讲法：
-- 这不是给 HR 出技术题
-- 而是给技术面试官的交接材料
-- evidence 不是整份简历，而是从 `项目经历 / 工作经验 / 实习经历 / 专业技能` 中按 query + JD 相关度选出的 Top-K chunk
-- 当前输出包括：
-  - `推荐理由`
-  - `风险点/存疑点`
-  - `追问建议`
+What to say:
+- this is reset-style refinement
+- previous filter constraints are replaced instead of appended
 
-## 多轮筛选 Demo
+### Step 5
+`帮我比较前两个候选人`
 
-同一会话里继续演示：
-1. `帮我找 Java 后端候选人`
-2. `只看985硕士`
-3. `继续只看北京的`
-4. `重新帮我筛选一次，这次按上海 Java`
+What to say:
+- compare consumes the current result set directly
+- the ranked list is explicitly addressable by position
 
-讲法：
-- `继续筛` 会继承上一轮 query 和 filter
-- `重新筛` 会保留会话入口，但替换上一轮筛选条件
-- 这更符合真实 HR 的操作习惯
+### Step 6
+`给第2个候选人生成面试交接提纲`
 
-## 推荐讲述顺序
+What to say:
+- this is not “HR asks AI to generate technical interview questions”
+- this is an interviewer handoff brief
+- it includes recommendation reasons, risks, and follow-up directions
 
-1. 基础搜索
-2. 方向型搜索
-3. 结构化过滤
-4. JD 上下文 chat
-5. compare
-6. interview handoff brief
-7. 多轮 refinement
+## Demo Notes
 
-## 演示时的边界说明
-
-- `careerStage` 当前不作为 JD 默认硬过滤主条件，因为候选人侧还没有足够稳定的校招/社招真值
-- compare 和 interview 已经可用，但它们属于扩展工作流，不是主搜索链
-- 面试交接提纲当前是证据驱动的确定性摘要，重点是可解释和可控，而不是生成花哨文案
+- For Chinese multi-turn refinement, always use UTF-8 clients like Apifox
+- `careerStage` is not treated as a default hard JD filter yet
+- compare and interview are extension workflows, not the main retrieval chain

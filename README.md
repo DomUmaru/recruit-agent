@@ -1,87 +1,106 @@
 # recruit-agent
 
-面向招聘场景的智能简历检索与候选人筛选后端系统。
+An agent-oriented recruitment backend for resume ingestion, candidate retrieval, multi-turn refinement, comparison, and interviewer handoff generation.
 
-当前版本已经完成一条可本地联调的主链路：
-- 简历上传与解析
-- OCR / 文本提取
-- 结构化切片与索引
-- 候选人搜索与多轮 refinement
-- JD 绑定的岗位上下文搜索
-- 候选人对比
-- 面试交接提纲生成
+## Overview
 
-## 核心能力
+This project is built around a realistic recruiting workflow instead of a single search API.
 
-### 1. 简历摄入与索引
-- `POST /api/resumes/upload`
-- 支持 PDF 文本解析与 OCR
-- 基于规则的结构化切片
-- 写入 Elasticsearch
+It supports:
+- resume upload, parsing, OCR fallback, and indexing
+- structured chunking for retrieval-friendly resume evidence
+- hybrid candidate retrieval with keyword, profile-vector, and chunk-vector recall
+- JD-aware reranking
+- multi-turn chat search with refinement inheritance
+- candidate comparison from ranked results
+- interviewer handoff briefs based on retrieved resume evidence
+
+## Core Workflow
+
+### 1. Resume Ingestion
+- upload PDF resumes
+- extract text with PDF parsing and OCR
+- normalize text
+- split resumes into structured chunks
+- build:
   - `resume_chunk`
   - `candidate_profile`
 
-### 2. 搜索与 refinement
-- `POST /api/search/candidates`
-- `POST /api/search/candidates/refine`
-- 支持自然语言 query 拆解
-  - query residual
-  - 结构化 filter
-- 当前支持的过滤维度
-  - 学历
-  - 学校层级
-  - 年限
-  - 技术栈
-  - 城市
-  - 大厂
-  - 外包
-  - career stage
+### 2. Retrieval
+- natural language query parsing
+- query residual plus structured filter extraction
+- hybrid retrieval:
+  - keyword retrieval
+  - `candidate_profile` vector retrieval
+  - `resume_chunk` vector retrieval
+- rerank for final ordering
 
-### 3. Hybrid retrieval + rerank
-- 关键词召回
-- `candidate_profile` 向量召回
-- `resume_chunk` 向量召回
-- rerank 精排
-- 支持 JD-aware rerank
+### 3. JD-Aware Search
+- chat sessions can bind a `positionId`
+- `PositionJD` constraints are injected into search
+- JD-aware reranking uses:
   - `title`
   - `prioritySkills`
   - `bonusSkills`
 
-### 4. Chat Agent
+### 4. Multi-turn Agent Workflow
+- `SEARCH`
+- `FILTER_REFINE`
+- `COMPARE`
+- `INTERVIEW`
+
+The chat workflow supports both:
+- append-style refinement, for example continuing to narrow results by adding new constraints
+- reset-style refinement, for example rerunning screening from scratch with a new set of constraints
+
+## Main Capabilities
+
+### Resume Upload and Indexing
+- `POST /api/resumes/upload`
+
+### Candidate Search
+- `POST /api/search/candidates`
+- `POST /api/search/candidates/refine`
+
+Supported filter dimensions:
+- degree
+- school tier
+- years of experience
+- technical skills
+- city
+- big tech
+- outsourcing
+- career stage
+
+### Chat Search
 - `POST /api/chat`
 - `POST /api/chat/stream`
-- 支持场景
-  - `SEARCH`
-  - `FILTER_REFINE`
-  - `COMPARE`
-  - `INTERVIEW`
-- chat session 可绑定 `positionId`
-- 每轮搜索会先加载对应 `PositionJD` 的默认约束
-- 支持两类筛选语义
-  - `继续筛`：继承上一轮结果，追加 filter
-  - `重新筛`：重开一轮，替换上一轮 filter
 
-### 5. 候选人对比与面试交接提纲
+### Candidate Comparison
 - `POST /api/comparison/candidates`
+
+Supports selecting candidates by ranked result position, such as:
+- first two
+- top three
+- last three
+- discrete selections like `1, 4, 5, 8`
+
+### Interview Handoff Brief
 - `POST /api/interview/questions`
 
-对比能力：
-- 支持按搜索结果序号选人
-- 支持
-  - `第1个和第2个`
-  - `前三个`
-  - `最后三个`
-  - `第1、4、5、8个`
+This is not framed as “HR generates technical interview questions”.
+It is framed as an interviewer handoff brief containing:
+- recommendation reasons
+- risks and gaps
+- follow-up directions
 
-面试交接提纲能力：
-- 不再定位为“HR 出题”
-- 输出面向技术面试官的交接材料
-  - `推荐理由`
-  - `风险点/存疑点`
-  - `追问建议`
-- evidence 来自候选人 `resume_chunk` 中与岗位和 query 最相关的 Top-K 片段
+Evidence is selected from high-signal resume sections:
+- project experience
+- work experience
+- internship experience
+- skills
 
-## 技术栈
+## Tech Stack
 
 - Java 17
 - Spring Boot 3.4.x
@@ -93,7 +112,7 @@
 - BGE-M3 embedding
 - bge-reranker-v2-m3
 
-## 项目结构
+## Project Structure
 
 ```text
 src/main/java/com/recruit/agent
@@ -114,20 +133,20 @@ python
 └── rerank-service
 ```
 
-## 本地运行
+## Local Setup
 
-### 1. 启动基础设施
+### 1. Start Infrastructure
 
 ```powershell
 docker compose up -d
 ```
 
-默认端口：
+Default ports:
 - MySQL: `3307`
 - Elasticsearch: `9200`
 - Kibana: `5601`
 
-### 2. 启动本地模型服务
+### 2. Start Local Model Services
 
 OCR:
 
@@ -153,65 +172,57 @@ cd python/rerank-service
 .\start.ps1
 ```
 
-### 3. 启动应用
+### 3. Start the Application
 
 ```powershell
 $env:OPENAI_API_KEY='dummy'
 .\mvnw.cmd -gs global-settings.xml -s settings.xml spring-boot:run "-Dspring-boot.run.profiles=local"
 ```
 
-说明：
-- `local` profile 默认接入 OCR / embedding / rerank
-- 即使当前不走真实 OpenAI，也建议提供占位 `OPENAI_API_KEY`
+Notes:
+- `local` profile is wired to OCR, embedding, and rerank services
+- a placeholder `OPENAI_API_KEY` is still recommended for startup compatibility
 
-### 4. 测试
+### 4. Run Tests
 
 ```powershell
 .\mvnw.cmd -gs global-settings.xml -s settings.xml test
 ```
 
-## 推荐 Demo 路线
+## Recommended Demo Flow
 
-### 路线 1：搜索主链
+### Search Demo
 1. `Java 后端`
 2. `搜索 推荐 Java`
 3. `Go 微服务`
 4. `前端 React`
 5. `985 硕士 Java`
 
-关注点：
-- topK 是否合理
-- evidence 是否能解释命中
-- refinement 是否能逐轮收敛
-
-### 路线 2：JD 上下文 chat
-绑定：
+### JD Chat Demo
+Use:
 - `positionId = JD-DEMO-001`
 
-示例消息：
-- `帮我找 Java 后端候选人`
-- `帮我比较前两个候选人`
-- `给第2个候选人生成面试交接提纲`
+Then:
+1. search for Java backend candidates
+2. refine to 985/master candidates
+3. continue refining by city
+4. compare the top candidates
+5. generate an interviewer handoff brief
 
-关注点：
-- JD 默认约束是否生效
-- `jdPreferenceScore` 是否参与排序
-- compare / interview 是否能消费会话内结果集
+## Project Positioning
 
-## 项目定位
-
-主线：
-- OCR / 结构化切片
+Mainline:
+- OCR and structured chunking
 - hybrid retrieval
 - rerank
-- JD-aware 搜索
+- JD-aware search
 - compare
 
-扩展能力：
-- chat 工具编排
-- 面试交接提纲
+Extension workflows:
+- chat orchestration
+- interviewer handoff brief
 
-当前更适合做的不是继续加功能，而是：
-- 固定 demo
-- 准备面试讲法
-- 保持文档和运行链路一致
+At this stage, the project is better served by:
+- stabilizing demos
+- improving interview storytelling
+- keeping docs aligned with actual runtime behavior

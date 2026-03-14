@@ -1,100 +1,80 @@
 # NEW_PROJECT_SUMMARY
 
-## 项目定位
+## Positioning
 
-这是一个面向招聘场景的智能简历检索与候选人筛选后端系统。
+This is an agent-oriented recruitment backend focused on resume retrieval and candidate screening.
 
-目标不是做一个简单的关键词搜索接口，而是覆盖一条更完整的招聘工作流：
-- 简历摄入
-- 候选人搜索
-- 多轮 refinement
-- 候选人对比
-- 面试交接提纲
-- chat 统一交互
+The goal is not just “search resumes by keyword”, but to support a fuller workflow:
+- resume ingestion
+- candidate search
+- multi-turn refinement
+- candidate comparison
+- interviewer handoff generation
+- unified chat interaction
 
-## 当前已经完成的主链
+## What Is Already Built
 
-### 1. 数据与索引
-- MySQL：业务主数据
-- Elasticsearch：检索与证据索引
+### Data and Indexes
+- MySQL for business data
+- Elasticsearch for retrieval and evidence
 
-核心索引：
+Core indexes:
 - `resume_chunk`
 - `candidate_profile`
 
-### 2. 摄入链
-- PDF 上传
-- PDFBox 文本提取
-- OCR fallback / OCR 主路径
-- 文本清洗
-- 结构化切片
-- Candidate Profile 抽取
-- MySQL + Elasticsearch 双写
+### Ingestion Pipeline
+- PDF upload
+- PDF text extraction
+- OCR fallback / OCR-first local workflow
+- text cleanup
+- structured chunking
+- candidate profile extraction
+- MySQL + Elasticsearch persistence
 
-### 3. 搜索链
-- 关键词召回
-- `candidate_profile` 向量召回
-- `resume_chunk` 向量召回
-- hybrid retrieval 融合
-- evidence chunk 召回
-- 自然语言 filter parsing
+### Search Pipeline
+- keyword retrieval
+- `candidate_profile` vector retrieval
+- `resume_chunk` vector retrieval
+- hybrid fusion
+- evidence retrieval
+- natural language filter parsing
 - refinement merge
 - rerank
 
-### 4. Agent 链
-- Router
-- State
-- Tool Calling
-- Orchestrator
-- Chat API
-- SSE
+### Agent Pipeline
+- router
+- state
+- tool execution
+- orchestrator
+- chat API
+- SSE stream
 
-### 5. 业务能力
+### Business Workflows
 - search
 - refinement
 - compare
 - interview handoff brief
 
-## 当前本地模型栈
+## Current Assessment
 
-### OCR
-- PaddleOCR
+The project is already past the “missing major features” phase.
 
-### Embedding
-- BGE-M3
+The current stage is:
+- core workflows are closed-loop
+- local OCR / embedding / rerank are integrated
+- search, compare, JD-context chat, and interview handoff are all runnable
+- the highest-value work is now demo quality, stability, and communication
 
-### Rerank
-- `bge-reranker-v2-m3`
+## Main Engineering Takeaways
 
-### LLM
-- Qwen / Spring AI tool orchestration
+- Resume chunking quality matters directly to retrieval quality
+- Search works better as query residual + structured filters, not raw keyword search
+- JD context should shape both filtering and reranking
+- Compare and interview workflows are better treated as downstream recruiter/interviewer collaboration tools
+- Multi-turn refinement must distinguish between:
+  - append refinement
+  - reset refinement
 
-## 当前阶段判断
+## Recommended One-line Pitch
 
-项目已经完成从 0 到 1 的主能力建设，当前不再是“功能缺失”的阶段，而是“质量收口与讲述固化”的阶段。
-
-更准确地说，当前状态是：
-- 核心链路已闭环
-- 本地 OCR / embedding / rerank 已接通
-- 搜索、对比、岗位上下文 chat、面试交接提纲都已跑通
-- 后续重点应该从“继续堆功能”转向“提高稳定性、可讲性和演示质量”
-
-## 当前最重要的工程结论
-
-- 不建议继续横向扩功能
-- 应优先做 demo 固化、面试讲法和少量文档清理
-- 文档、运行方式、样本与模型服务协议要保持同步
-
-## 推荐讲法
-
-一句话版本：
-
-这是一个把简历解析、结构化切片、混合检索、重排和岗位上下文结合起来的招聘检索系统，目标是帮助 HR 和用人部门更快找到更匹配的候选人，并给出可解释证据。
-
-## 下一阶段建议
-
-如果后面还要继续做，不建议再新增主能力，优先级应是：
-1. 固定 demo 流程
-2. 固定 query / chat 话术
-3. 准备面试讲稿
-4. 视情况补小范围 eval 或 observability
+This is a recruitment agent backend that combines resume parsing, structured chunking, hybrid retrieval, reranking, and JD-aware conversation flow to help recruiters and hiring teams find better-matched candidates with evidence-backed results.
