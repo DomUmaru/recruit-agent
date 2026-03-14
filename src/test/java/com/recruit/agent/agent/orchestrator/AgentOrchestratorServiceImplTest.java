@@ -164,7 +164,7 @@ class AgentOrchestratorServiceImplTest {
         when(sessionRepository.findBySessionNo("session-2")).thenReturn(Optional.of(session));
         when(stateService.load(session)).thenReturn(state);
         when(routerService.route(any())).thenReturn(decision);
-        when(candidateSelectionService.resolveSelectedCandidateIds(any(), eq("对比前两个")))
+        when(candidateSelectionService.resolveSelectedCandidateIds(any(), eq("比较前两个人")))
             .thenReturn(List.of("candidate-1", "candidate-2"));
         when(agentToolExecutionService.execute(any(), any(), any())).thenReturn(new AgentToolExecutionResult());
         when(messageRepository.findBySessionIdOrderBySequenceNoAsc("session-id")).thenReturn(List.of(), List.of(existingMessage));
@@ -173,11 +173,78 @@ class AgentOrchestratorServiceImplTest {
         AgentExecuteRequest request = new AgentExecuteRequest();
         request.setSessionNo("session-2");
         request.setUserId("user-1");
-        request.setUserInput("对比前两个");
+        request.setUserInput("比较前两个人");
 
         service.execute(request);
 
         assertEquals(List.of("candidate-1", "candidate-2"), state.getSelectedCandidateIds());
-        verify(agentToolExecutionService).execute(any(), eq(state), eq("对比前两个"));
+        verify(agentToolExecutionService).execute(any(), eq(state), eq("比较前两个人"));
+    }
+
+    @Test
+    void shouldKeepNormalizedQueryAfterRefinement() {
+        AgentRouterService routerService = org.mockito.Mockito.mock(AgentRouterService.class);
+        AgentToolExecutionService agentToolExecutionService = org.mockito.Mockito.mock(AgentToolExecutionService.class);
+        CandidateSelectionService candidateSelectionService = org.mockito.Mockito.mock(CandidateSelectionService.class);
+        ChatSessionRepository sessionRepository = org.mockito.Mockito.mock(ChatSessionRepository.class);
+        ChatMessageRepository messageRepository = org.mockito.Mockito.mock(ChatMessageRepository.class);
+        ChatSessionStateService stateService = org.mockito.Mockito.mock(ChatSessionStateService.class);
+        PositionJDRepository positionJDRepository = org.mockito.Mockito.mock(PositionJDRepository.class);
+
+        AgentOrchestratorServiceImpl service = new AgentOrchestratorServiceImpl(
+            routerService,
+            agentToolExecutionService,
+            candidateSelectionService,
+            sessionRepository,
+            messageRepository,
+            stateService,
+            positionJDRepository,
+            new PositionJdSearchFilterResolver(),
+            new ObjectMapper()
+        );
+
+        ChatSession session = new ChatSession();
+        session.setId("session-id");
+        session.setSessionNo("session-refine");
+        session.setUserId("user-1");
+        session.setCurrentScene(ChatScene.SEARCH);
+        session.setStatus(ChatSessionStatus.ACTIVE);
+
+        ChatSessionState state = new ChatSessionState();
+        state.setCurrentScene(ChatScene.SEARCH);
+        state.setCurrentQuery("Java 后端");
+        state.setLastCandidateIds(List.of("candidate-1", "candidate-2"));
+
+        AgentRouteDecision decision = new AgentRouteDecision();
+        decision.setScene(ChatScene.FILTER_REFINE);
+        decision.setToolName("refineSearchFilterTool");
+
+        CandidateSearchResponse searchResponse = new CandidateSearchResponse();
+        searchResponse.setQuery("Java 后端");
+        searchResponse.setTotal(1);
+        searchResponse.setCandidates(List.of());
+
+        AgentToolExecutionResult executionResult = new AgentToolExecutionResult();
+        executionResult.setSearchResponse(searchResponse);
+
+        ChatMessage existingMessage = new ChatMessage();
+        existingMessage.setSequenceNo(1);
+
+        when(sessionRepository.findBySessionNo("session-refine")).thenReturn(Optional.of(session));
+        when(stateService.load(session)).thenReturn(state);
+        when(routerService.route(any())).thenReturn(decision);
+        when(candidateSelectionService.resolveSelectedCandidateIds(any(), any())).thenReturn(null);
+        when(agentToolExecutionService.execute(any(), any(), any())).thenReturn(executionResult);
+        when(messageRepository.findBySessionIdOrderBySequenceNoAsc("session-id")).thenReturn(List.of(), List.of(existingMessage));
+        when(sessionRepository.save(any(ChatSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AgentExecuteRequest request = new AgentExecuteRequest();
+        request.setSessionNo("session-refine");
+        request.setUserId("user-1");
+        request.setUserInput("只看985硕士");
+
+        service.execute(request);
+
+        assertEquals("Java 后端", state.getCurrentQuery());
     }
 }

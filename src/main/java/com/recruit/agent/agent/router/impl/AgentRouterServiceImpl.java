@@ -24,15 +24,44 @@ public class AgentRouterServiceImpl implements AgentRouterService {
     private static final String INTERVIEW_TOOL_NAME = "generateInterviewQuestionsTool";
 
     private static final List<String> REFINE_KEYWORDS = List.of(
-        "只要", "再加", "追加", "筛选", "过滤", "排除", "限定", "仅看", "优先", "不要", "只看", "保留"
+        "\u53ea\u8981",
+        "\u518d\u52a0",
+        "\u8ffd\u52a0",
+        "\u7b5b\u9009",
+        "\u8fc7\u6ee4",
+        "\u6392\u9664",
+        "\u9650\u5b9a",
+        "\u4ec5\u770b",
+        "\u4f18\u5148",
+        "\u4e0d\u8981",
+        "\u53ea\u770b",
+        "\u4fdd\u7559",
+        "\u7ee7\u7eed",
+        "\u91cd\u65b0",
+        "\u91cd\u65b0\u7b5b\u9009",
+        "\u91cd\u65b0\u6765",
+        "\u91cd\u7b5b",
+        "\u6362\u4e00\u6279",
+        "\u8fd9\u6b21\u6309"
     );
 
     private static final List<String> COMPARE_KEYWORDS = List.of(
-        "对比", "比较", "比一下", "比一比", "横向看", "pk"
+        "\u5bf9\u6bd4",
+        "\u6bd4\u8f83",
+        "\u6bd4\u4e00\u4e2a",
+        "\u6bd4\u4e00\u6bd4",
+        "\u6a2a\u5411\u770b",
+        "pk"
     );
 
     private static final List<String> INTERVIEW_KEYWORDS = List.of(
-        "面试", "面试题", "题目", "提问", "追问", "八股", "interview"
+        "\u9762\u8bd5",
+        "\u9762\u8bd5\u9898",
+        "\u9898\u76ee",
+        "\u63d0\u95ee",
+        "\u8ffd\u95ee",
+        "\u516b\u80a1",
+        "interview"
     );
 
     private final LlmGenerationService llmGenerationService;
@@ -51,11 +80,25 @@ public class AgentRouterServiceImpl implements AgentRouterService {
     public AgentRouteDecision route(AgentRoutingContext context) {
         AgentRoutingContext safeContext = context == null ? new AgentRoutingContext() : context;
 
+        AgentRouteDecision ruleDecision = routeWithRules(safeContext);
+        if (ruleDecision.getScene() == ChatScene.FILTER_REFINE
+            || ruleDecision.getScene() == ChatScene.COMPARE
+            || ruleDecision.getScene() == ChatScene.INTERVIEW) {
+            log.info("Agent router final scene={} via rules-priority. userInput='{}', currentQuery='{}'.",
+                ruleDecision.getScene(), safeValue(safeContext.getUserInput()), safeValue(safeContext.getCurrentQuery()));
+            return ruleDecision;
+        }
+
         AgentRouteDecision llmDecision = routeWithLlm(safeContext);
         if (llmDecision != null) {
+            log.info("Agent router final scene={} via llm. userInput='{}', currentQuery='{}'.",
+                llmDecision.getScene(), safeValue(safeContext.getUserInput()), safeValue(safeContext.getCurrentQuery()));
             return llmDecision;
         }
-        return routeWithRules(safeContext);
+
+        log.info("Agent router final scene={} via rules. userInput='{}', currentQuery='{}'.",
+            ruleDecision.getScene(), safeValue(safeContext.getUserInput()), safeValue(safeContext.getCurrentQuery()));
+        return ruleDecision;
     }
 
     private AgentRouteDecision routeWithLlm(AgentRoutingContext context) {
@@ -86,7 +129,6 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             decision.setToolName(resolveToolName(scene));
             decision.setHistoryRequired(historyRequired);
             decision.setReason(hasText(output.getReason()) ? "llm-router: " + output.getReason().trim() : "llm-router");
-            log.info("Agent router selected scene={} via LLM.", scene);
             return decision;
         } catch (Exception exception) {
             log.warn("LLM router failed. Falling back to rule-based routing.", exception);
@@ -106,7 +148,7 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             decision.setScene(ChatScene.INTERVIEW);
             decision.setToolName(INTERVIEW_TOOL_NAME);
             decision.setHistoryRequired(true);
-            decision.setReason("检测到面试题生成语义，且会话中存在可复用的候选人范围");
+            decision.setReason("rule-interview");
             return decision;
         }
 
@@ -114,7 +156,7 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             decision.setScene(ChatScene.COMPARE);
             decision.setToolName(COMPARE_TOOL_NAME);
             decision.setHistoryRequired(true);
-            decision.setReason("检测到候选人对比语义，且会话中存在可复用的候选人列表");
+            decision.setReason("rule-compare");
             return decision;
         }
 
@@ -122,16 +164,14 @@ public class AgentRouterServiceImpl implements AgentRouterService {
             decision.setScene(ChatScene.FILTER_REFINE);
             decision.setToolName(REFINE_TOOL_NAME);
             decision.setHistoryRequired(true);
-            decision.setReason("检测到追加或覆盖筛选语义，且会话中存在可复用的搜索历史");
+            decision.setReason("rule-refine");
             return decision;
         }
 
         decision.setScene(ChatScene.SEARCH);
         decision.setToolName(SEARCH_TOOL_NAME);
         decision.setHistoryRequired(false);
-        decision.setReason(hasHistory
-            ? "当前输入更像新的搜索需求，优先按搜索场景处理"
-            : "未检测到可复用历史状态，按新搜索处理");
+        decision.setReason(hasHistory ? "rule-new-search-with-history" : "rule-new-search");
         return decision;
     }
 

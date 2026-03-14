@@ -55,7 +55,10 @@ public class SpringAiAgentToolExecutionService implements AgentToolExecutionServ
 
     @Override
     public AgentToolExecutionResult execute(AgentRouteDecision routeDecision, ChatSessionState state, String userInput) {
-        if (routeDecision.getScene() == ChatScene.COMPARE || routeDecision.getScene() == ChatScene.INTERVIEW) {
+        if (routeDecision.getScene() == ChatScene.SEARCH
+            || routeDecision.getScene() == ChatScene.COMPARE
+            || routeDecision.getScene() == ChatScene.INTERVIEW
+            || routeDecision.getScene() == ChatScene.FILTER_REFINE) {
             return deterministicAgentToolExecutionService.execute(routeDecision, state, userInput);
         }
         Object availableTool = resolveTool(routeDecision);

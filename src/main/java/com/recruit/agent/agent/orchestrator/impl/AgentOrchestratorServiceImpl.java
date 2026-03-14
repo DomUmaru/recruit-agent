@@ -27,6 +27,8 @@ import com.recruit.agent.search.dto.CandidateSearchFilter;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentOrchestratorServiceImpl.class);
 
     private final AgentRouterService agentRouterService;
     private final AgentToolExecutionService agentToolExecutionService;
@@ -78,9 +82,19 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
         saveMessage(session, ChatMessageRole.USER, safeRequest.getUserInput(), null);
 
         AgentRouteDecision routeDecision = agentRouterService.route(buildRoutingContext(safeRequest, session));
+        log.info("Agent orchestrator routeDecision scene={}, tool={}, userInput='{}', currentQuery='{}'",
+            routeDecision.getScene(),
+            routeDecision.getToolName(),
+            safeRequest.getUserInput(),
+            state.getCurrentQuery());
         applySelection(state, routeDecision, safeRequest.getUserInput());
 
         AgentToolExecutionResult executionResult = agentToolExecutionService.execute(routeDecision, state, safeRequest.getUserInput());
+        log.info("Agent orchestrator executionResult scene={}, tool={}, searchQuery='{}', searchTotal={}",
+            routeDecision.getScene(),
+            routeDecision.getToolName(),
+            executionResult.getSearchResponse() == null ? null : executionResult.getSearchResponse().getQuery(),
+            executionResult.getSearchResponse() == null ? null : executionResult.getSearchResponse().getTotal());
 
         updateState(state, routeDecision, safeRequest.getUserInput(), executionResult);
         chatSessionStateService.apply(session, state);
@@ -161,7 +175,12 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
                              String userInput,
                              AgentToolExecutionResult executionResult) {
         state.setCurrentScene(routeDecision.getScene());
-        state.setCurrentQuery(resolveCurrentQuery(state.getCurrentQuery(), routeDecision.getScene(), userInput));
+        state.setCurrentQuery(resolveCurrentQuery(
+            state.getCurrentQuery(),
+            routeDecision.getScene(),
+            userInput,
+            executionResult
+        ));
 
         if (executionResult.getInterviewResponse() != null && executionResult.getInterviewResponse().getCandidates() != null) {
             state.setSelectedCandidateIds(executionResult.getInterviewResponse().getCandidates().stream()
@@ -238,9 +257,18 @@ public class AgentOrchestratorServiceImpl implements AgentOrchestratorService {
         return currentQuery + " " + latestInput;
     }
 
-    private String resolveCurrentQuery(String currentQuery, ChatScene scene, String userInput) {
+    private String resolveCurrentQuery(String currentQuery,
+                                       ChatScene scene,
+                                       String userInput,
+                                       AgentToolExecutionResult executionResult) {
+        String executedQuery = executionResult.getSearchResponse() == null
+            ? null
+            : executionResult.getSearchResponse().getQuery();
+        if ((scene == ChatScene.SEARCH || scene == ChatScene.FILTER_REFINE) && hasText(executedQuery)) {
+            return executedQuery;
+        }
         if (scene == ChatScene.FILTER_REFINE) {
-            return mergeQuery(currentQuery, userInput);
+            return hasText(currentQuery) ? currentQuery : userInput;
         }
         if (scene == ChatScene.COMPARE || scene == ChatScene.INTERVIEW) {
             return currentQuery == null || currentQuery.isBlank() ? userInput : currentQuery;

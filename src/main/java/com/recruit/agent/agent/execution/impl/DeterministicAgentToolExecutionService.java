@@ -23,6 +23,15 @@ import org.springframework.stereotype.Service;
 @Service
 public class DeterministicAgentToolExecutionService implements AgentToolExecutionService {
 
+    private static final java.util.List<String> REPLACE_REFINEMENT_KEYWORDS = java.util.List.of(
+        "\u91cd\u65b0",
+        "\u91cd\u65b0\u7b5b\u9009",
+        "\u91cd\u65b0\u6765",
+        "\u91cd\u7b5b",
+        "\u6362\u4e00\u6279",
+        "\u8fd9\u6b21\u6309"
+    );
+
     private final CompareCandidatesToolService compareCandidatesToolService;
     private final GenerateInterviewQuestionsToolService generateInterviewQuestionsToolService;
     private final SearchCandidateToolService searchCandidateToolService;
@@ -65,7 +74,7 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
             CandidateSearchRefineRequest refineRequest = new CandidateSearchRefineRequest();
             refineRequest.setBaseRequest(buildBaseRequest(state));
             refineRequest.setRefinementQuery(userInput);
-            refineRequest.setMergeMode(FilterMergeMode.APPEND);
+            refineRequest.setMergeMode(resolveRefinementMergeMode(userInput));
             refineRequest.setScopeCandidateIds(state.getLastCandidateIds());
             result.setSearchResponse(refineSearchFilterToolService.execute(refineRequest));
             return result;
@@ -99,5 +108,12 @@ public class DeterministicAgentToolExecutionService implements AgentToolExecutio
         request.setFilter(state.getFilter());
         request.setScopeCandidateIds(state.getLastCandidateIds());
         return request;
+    }
+
+    private FilterMergeMode resolveRefinementMergeMode(String userInput) {
+        String safeInput = userInput == null ? "" : userInput;
+        return REPLACE_REFINEMENT_KEYWORDS.stream().anyMatch(safeInput::contains)
+            ? FilterMergeMode.REPLACE
+            : FilterMergeMode.APPEND;
     }
 }
