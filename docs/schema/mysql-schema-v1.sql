@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS `chat_session`
     `id`                          VARCHAR(36)   NOT NULL COMMENT '主键 ID',
     `created_at`                  DATETIME      NOT NULL COMMENT '创建时间',
     `updated_at`                  DATETIME      NOT NULL COMMENT '更新时间',
+    `position_id`                 VARCHAR(64)   NULL COMMENT '当前绑定的岗位 ID',
     `session_no`                  VARCHAR(64)   NOT NULL COMMENT '会话编号',
     `user_id`                     VARCHAR(64)   NOT NULL COMMENT '发起会话的用户 ID',
     `current_scene`               VARCHAR(32)   NOT NULL COMMENT '当前会话场景',
@@ -104,6 +105,7 @@ CREATE TABLE IF NOT EXISTS `chat_session`
     `session_state_json`          LONGTEXT      NULL COMMENT '完整会话状态快照 JSON',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_chat_session_session_no` (`session_no`),
+    KEY `idx_chat_session_position_id` (`position_id`),
     KEY `idx_chat_session_user_status` (`user_id`, `status`),
     KEY `idx_chat_session_updated_at` (`updated_at`)
 ) ENGINE = InnoDB
